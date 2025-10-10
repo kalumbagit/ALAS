@@ -1,241 +1,125 @@
-Parfait 👍 voici une **version bien structurée, claire et prête à l’emploi** de ton **README**, adaptée à un usage d’équipe ou d’évolution future du socle backend FastAPI.
-J’ai reformulé, corrigé la cohérence, et ajouté un en-tête professionnel.
+
+# ALAS1 – Service Gestion des Utilisateurs
+
+**Nom du projet :** ALAS1
+**Dépôt parent :** ALAS (Application Livraison All Service)
+**Service :** Gestion des utilisateurs
 
 ---
 
-# 🚀 Base Backend FastAPI – Architecture Générique & Réutilisable
+## 1. Description
 
-## 🧭 Description
+ALAS1 est le **service central de gestion des utilisateurs** pour l’application de livraison. Il gère toutes les fonctionnalités liées aux utilisateurs, y compris :
 
-Ce projet constitue une **base de code réutilisable** pour tout développement backend basé sur **FastAPI**.
-Il sert de **socle technique** que chaque équipe ou développeur pourra **adapter et étendre** selon les besoins de son propre service ou microservice.
+* Création, modification et suppression de comptes
+* Gestion des types d’utilisateurs (clients, marchands, livreurs)
+* Authentification (login / logout / JWT)
+* Hachage sécurisé des mots de passe
+* Activation et désactivation des comptes
+* Suivi des localisations utilisateurs (pour livreurs ou marchands)
 
-Le projet inclut une configuration complète de :
-
-* FastAPI (framework backend principal)
-* Uvicorn (serveur ASGI)
-* ORM asynchrone pour PostgreSQL ou SQLite
-* Gestion de la configuration (.env)
-* Authentification JWT
-* Outils de monitoring, typage et sérialisation performante
+Ce service constitue la **base utilisateur** sur laquelle tous les autres services interconnectés d’ALAS vont s’appuyer.
 
 ---
 
-## 📦 Dépendances principales
-
-Le fichier `requirements.txt` contient **toutes les dépendances nécessaires** au **lancement complet du projet FastAPI + Uvicorn**, ainsi que les bibliothèques associées aux bases de données, à la sécurité, et à la configuration.
-
----
-
-### 🧱 **1. Framework & Serveur Web**
-
-| Lib                                                                  | Rôle                                                                                                                     |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **fastapi**                                                          | Framework principal — gère les routes, la validation, les dépendances et la documentation automatique (Swagger / ReDoc). |
-| **starlette**                                                        | Base sous-jacente de FastAPI (gestion HTTP, WebSockets, middlewares).                                                    |
-| **uvicorn**                                                          | Serveur ASGI rapide pour exécuter l’application : `uvicorn app.main:app --reload`.                                       |
-| **httptools**, **uvloop**, **anyio**, **async-timeout**, **sniffio** | Améliorent la performance et la gestion asynchrone du serveur.                                                           |
-| **fastapi-cli**, **fastapi-cloud-cli**                               | Outils CLI pour le lancement, la configuration ou le déploiement du projet FastAPI.                                      |
-
----
-
-### 🗄️ **2. Base de données & ORM**
-
-| Lib                   | Rôle                                                                                                 |
-| --------------------- | ---------------------------------------------------------------------------------------------------- |
-| **tortoise-orm**      | ORM asynchrone (équivalent de SQLAlchemy, mais async). Simplifie la gestion des modèles et requêtes. |
-| **pypika-tortoise**   | Générateur SQL utilisé en interne par Tortoise ORM.                                                  |
-| **asyncpg**           | Driver PostgreSQL asynchrone, performant et compatible Tortoise.                                     |
-| **aiosqlite**         | Driver SQLite asynchrone — utile pour les tests ou petits environnements.                            |
-| **psycopg2-binary**   | Driver PostgreSQL synchrone (utilisé pour scripts ou migrations).                                    |
-| **iso8601**, **pytz** | Gestion des formats de date et des fuseaux horaires.                                                 |
-
----
-
-### ⚙️ **3. Configuration & Environnement**
-
-| Lib                                                               | Rôle                                                                     |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| **python-dotenv**                                                 | Charge les variables d’environnement depuis un fichier `.env`.           |
-| **pydantic**, **pydantic-settings**, **pydantic-extra-types**     | Validation typée des données et gestion centralisée de la configuration. |
-| **typing_extensions**, **annotated-types**, **typing-inspection** | Compatibilité et typage avancé pour une meilleure robustesse du code.    |
-
----
-
-### 🔐 **4. Authentification & Sécurité**
-
-| Lib                                                       | Rôle                                                                     |
-| --------------------------------------------------------- | ------------------------------------------------------------------------ |
-| **fastapi-jwt-auth**                                      | Gestion JWT : génération, validation et intégration dans les endpoints.  |
-| **PyJWT**                                                 | Encode / décode les tokens JWT (souvent utilisé en interne).             |
-| **bcrypt** *(à ajouter si absent)*                        | Hashage sécurisé des mots de passe.                                      |
-| **itsdangerous**                                          | Génération de tokens sécurisés (ex. : réinitialisation de mot de passe). |
-| **email-validator**, **dnspython**, **certifi**, **idna** | Validation des emails et gestion des certificats SSL.                    |
-
----
-
-### ⚡ **5. Sérialisation, HTTP & Performance**
-
-| Lib                        | Rôle                                                       |
-| -------------------------- | ---------------------------------------------------------- |
-| **httpx**, **urllib3**     | Clients HTTP asynchrones pour communication interservices. |
-| **orjson**, **ujson**      | Sérialisation JSON ultra-rapide.                           |
-| **rich**, **rich-toolkit** | Améliore l’affichage des logs et des erreurs en console.   |
-
----
-
-### 🧰 **6. Outils de développement & utilitaires**
-
-| Lib                                          | Rôle                                                                       |
-| -------------------------------------------- | -------------------------------------------------------------------------- |
-| **typer**                                    | Création de scripts et outils CLI pour la maintenance ou l’administration. |
-| **watchfiles**                               | Reload automatique du serveur en mode développement.                       |
-| **python-multipart**                         | Support des uploads de fichiers (images, CSV, etc.).                       |
-| **PyYAML**                                   | Lecture/écriture de fichiers YAML (configurations ou CI/CD).               |
-| **Jinja2**, **Pygments**, **markdown-it-py** | Génération ou rendu Markdown/HTML pour docs ou templates emails.           |
-
----
-
-### 🧩 **7. Observabilité, Erreurs & Monitoring**
-
-| Lib            | Rôle                                               |
-| -------------- | -------------------------------------------------- |
-| **sentry-sdk** | Capture et suivi des erreurs (intégration Sentry). |
-
----
-
-### 🌐 **8. Communication Temps Réel**
-
-| Lib            | Rôle                                                  |
-| -------------- | ----------------------------------------------------- |
-| **websockets** | Gestion des connexions WebSocket (temps réel / push). |
-
----
-
-## ⚡ Lancer le projet localement
-
-```bash
-# 1. Créer et activer un environnement virtuel
-python -m venv venv
-source venv/bin/activate  # (Linux/Mac)
-venv\Scripts\activate     # (Windows)
-
-# 2. Installer les dépendances
-pip install -r requirements.txt
-
-# 3. Lancer le serveur
-uvicorn app.main:app --reload
-```
-
----
-
-## 🧱 Structure recommandée du projet
+## 2. Architecture
 
 ```
 app/
 │
-├── controllers/                 # Contient les routes et points d’entrée de l’API (ex : user.py, product.py)
-│   └── __init__.py              # Rend le dossier importable comme module Python
-│
-├── core/                        # Cœur de l’application : configuration, sécurité, base de données
-│   ├── config.py                # Gère la configuration globale (variables d’environnement, secrets, etc.)
-│   ├── database.py              # Initialise la connexion à la base de données et gère le cycle de vie
-│   ├── enums.py                 # Contient les énumérations globales (statuts, rôles, types, etc.)
-│   ├── exceptions.py            # Définit les exceptions personnalisées (ex : NotFoundException)
-│   ├── ResponseHandler.py       # Centralise le formatage des réponses JSON (succès / erreur)
-│   └── security.py              # Gestion de la sécurité et des tokens JWT (authentification, hash, permissions)
-│
-├── events/                      # Gère les événements du cycle de vie (startup, shutdown, etc.)
-│
-├── __init__.py                  # Rend le répertoire "app" importable en tant que module
-│
-├── main.py                      # Point d’entrée principal : crée l’objet FastAPI, monte les routes et middlewares
-│
-├── middlewares/                 # Contient les middlewares personnalisés
-│   └── middlewares.py           # Exemple : gestion du logging, CORS, timing des requêtes, etc.
-│
-├── models/                      # Modèles de base de données (ORM : Tortoise / SQLAlchemy)
-│   └── __init__.py              # Rend le dossier importable
-│
-├── ReadMe                       # Documentation du projet (présentation, installation, dépendances, etc.)
-│
-├── requirements.txt             # Liste complète des dépendances nécessaires au projet
-│
-├── schemas/                     # Schémas Pydantic pour la validation des entrées/sorties
-│   └── __init__.py              # Rend le dossier importable
-│
-├── services/                    # Logique métier (création d’utilisateur, gestion des produits, etc.)
-│   └── __init__.py              # Rend le dossier importable
-│
-├── tests/                       # Contient les tests unitaires et d’intégration
-│   └── __init__.py              # Rend le dossier importable
-│
-└── utils/                       # Fonctions utilitaires réutilisables (formatage, génération de tokens, etc.)
-
+├── controllers/      # Gestion des endpoints et des routes API
+├── core/             # Configuration, base de données, sécurité, exceptions
+├── events/           # Événements et listeners inter-services (Kafka, etc.)
+├── middlewares/      # Middlewares (auth, logging, validation)
+├── models/           # Définition des modèles Tortoise ORM
+├── schemas/          # Pydantic schemas pour validation et serialization
+├── services/         # Logique métier réutilisable
+├── utils/            # Fonctions utilitaires
+├── tests/            # Tests unitaires et d’intégration
+├── main.py           # Point d’entrée FastAPI
+├── requirements.txt  # Dépendances Python
+└── ReadMe            # Ce fichier
 ```
 
 ---
 
-## 📘 Remarques
+## 3. Dépendances principales
 
-* Ce socle est **modulaire** et conçu pour être **étendu** selon le besoin (auth, produits, commandes, etc.).
-* Chaque microservice futur (User, Product, Payment, etc.) pourra **réutiliser la même structure et dépendances de base**.
-* Idéal pour une architecture microservices basée sur **FastAPI + PostgreSQL + Kafka (ou HTTP)**.
+| Librairie            | Rôle                                    |
+| -------------------- | --------------------------------------- |
+| **FastAPI**          | Framework web pour créer les API REST   |
+| **Uvicorn**          | Serveur ASGI pour lancer l’application  |
+| **Tortoise ORM**     | ORM asynchrone pour PostgreSQL          |
+| **asyncpg**          | Driver PostgreSQL asynchrone            |
+| **python-dotenv**    | Gestion des variables d’environnement   |
+| **pydantic**         | Validation et sérialisation des données |
+| **fastapi-jwt-auth** | Gestion JWT pour authentification       |
+| **bcrypt**           | Hachage sécurisé des mots de passe      |
 
----
-
-## 💼 Bonnes pratiques de contribution
-
-### 🧩 1. Conventions de code
-
-* Respecter le **PEP8** (espacements, noms, imports).
-* Utiliser **typage explicite** (Pydantic / typing).
-* Toujours documenter les routes via les **docstrings FastAPI** :
-
-  ```python
-  @router.get("/users", summary="Liste des utilisateurs", response_model=List[UserSchema])
-  ```
-
-### 🧪 2. Tests
-
-* Tous les modules doivent avoir leurs **tests unitaires et d’intégration** (`pytest`).
-* Les tests doivent tourner localement avec SQLite (via `aiosqlite`).
-* Objectif minimal : **80 % de couverture**.
-
-### 🔒 3. Sécurité
-
-* Ne jamais exposer les secrets (`JWT_SECRET`, `DB_PASSWORD`) dans le code source.
-* Utiliser `.env.example` pour fournir un modèle de configuration.
-
-### 🔄 4. Commits & branches
-
-* Convention de nommage :
-
-  * `feat/` pour nouvelle fonctionnalité
-  * `fix/` pour correction
-  * `refactor/` pour restructuration
-  * `test/` pour ajout de tests
-* Ex. : `feat/add-product-endpoint`
-
-### 📘 5. Documentation
-
-* Toute nouvelle route ou service doit être documenté :
-
-  * Swagger (`/docs`)
-  * README spécifique au module
-  * Exemple d’appel API
-
-### 🚀 6. Déploiement & environnement
-
-* Toujours tester sur un environnement **staging** avant production.
-* Configurer `sentry-sdk` pour capturer les erreurs runtime.
-* Vérifier les index et performances DB avant la mise en ligne.
+*(Voir `requirements.txt` pour la liste complète)*
 
 ---
 
-## 📌 Conclusion
+## 5. Installation et lancement
 
-Ce dépôt offre une **structure modulaire, performante et maintenable** pour tout projet basé sur **FastAPI**.
-Il constitue un **socle solide** pour évoluer vers une architecture microservices complète (User, Product, Payment, Delivery, etc.).
+1. **Créer un environnement virtuel**
 
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+2. **Installer les dépendances**
+
+```bash
+pip install -r requirements.txt
+```
+
+3. **Lancer le service**
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+4. **Accéder à la documentation interactive**
+
+* Swagger UI : [http://localhost:8000/docs](http://localhost:8000/docs)
+* ReDoc : [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+---
+
+## 6. Tests
+
+Exécuter les tests unitaires et d’intégration avec **pytest** :
+
+```bash
+pytest -v
+```
+
+---
+
+## 7. Branches Git
+
+* Branche principale : `main`
+* Branche de développement du service utilisateur : `ALAS1`
+
+```bash
+git switch -c ALAS1
+```
+
+---
+
+## 8. Contribution
+
+* Chaque modification doit être effectuée sur **une branche dédiée** basée sur `ALAS1`.
+* Respecter la structure de dossiers et les conventions de code Python / FastAPI.
+* Ajouter des tests pour chaque nouvelle fonctionnalité.
+
+---
+
+## 9. Liens utiles
+
+* [FastAPI Documentation](https://fastapi.tiangolo.com/)
+* [Tortoise ORM](https://tortoise-orm.readthedocs.io/)
+* [FastAPI JWT Auth](https://pypi.org/project/fastapi-jwt-auth/)
 

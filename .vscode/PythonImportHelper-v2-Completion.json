@@ -1,0 +1,389 @@
+[
+    {
+        "label": "Any",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "Dict",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "Optional",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "List",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "Optional",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "JSONResponse",
+        "importPath": "fastapi.responses",
+        "description": "fastapi.responses",
+        "isExtraImport": true,
+        "detail": "fastapi.responses",
+        "documentation": {}
+    },
+    {
+        "label": "JSONResponse",
+        "importPath": "fastapi.responses",
+        "description": "fastapi.responses",
+        "isExtraImport": true,
+        "detail": "fastapi.responses",
+        "documentation": {}
+    },
+    {
+        "label": "Response",
+        "importPath": "fastapi",
+        "description": "fastapi",
+        "isExtraImport": true,
+        "detail": "fastapi",
+        "documentation": {}
+    },
+    {
+        "label": "FastAPI",
+        "importPath": "fastapi",
+        "description": "fastapi",
+        "isExtraImport": true,
+        "detail": "fastapi",
+        "documentation": {}
+    },
+    {
+        "label": "FastAPI",
+        "importPath": "fastapi",
+        "description": "fastapi",
+        "isExtraImport": true,
+        "detail": "fastapi",
+        "documentation": {}
+    },
+    {
+        "label": "Request",
+        "importPath": "fastapi",
+        "description": "fastapi",
+        "isExtraImport": true,
+        "detail": "fastapi",
+        "documentation": {}
+    },
+    {
+        "label": "HTTPException",
+        "importPath": "fastapi",
+        "description": "fastapi",
+        "isExtraImport": true,
+        "detail": "fastapi",
+        "documentation": {}
+    },
+    {
+        "label": "FastAPI",
+        "importPath": "fastapi",
+        "description": "fastapi",
+        "isExtraImport": true,
+        "detail": "fastapi",
+        "documentation": {}
+    },
+    {
+        "label": "HTTP_200_OK",
+        "importPath": "starlette.status",
+        "description": "starlette.status",
+        "isExtraImport": true,
+        "detail": "starlette.status",
+        "documentation": {}
+    },
+    {
+        "label": "HTTP_201_CREATED",
+        "importPath": "starlette.status",
+        "description": "starlette.status",
+        "isExtraImport": true,
+        "detail": "starlette.status",
+        "documentation": {}
+    },
+    {
+        "label": "HTTP_204_NO_CONTENT",
+        "importPath": "starlette.status",
+        "description": "starlette.status",
+        "isExtraImport": true,
+        "detail": "starlette.status",
+        "documentation": {}
+    },
+    {
+        "label": "HTTP_400_BAD_REQUEST",
+        "importPath": "starlette.status",
+        "description": "starlette.status",
+        "isExtraImport": true,
+        "detail": "starlette.status",
+        "documentation": {}
+    },
+    {
+        "label": "HTTP_401_UNAUTHORIZED",
+        "importPath": "starlette.status",
+        "description": "starlette.status",
+        "isExtraImport": true,
+        "detail": "starlette.status",
+        "documentation": {}
+    },
+    {
+        "label": "HTTP_403_FORBIDDEN",
+        "importPath": "starlette.status",
+        "description": "starlette.status",
+        "isExtraImport": true,
+        "detail": "starlette.status",
+        "documentation": {}
+    },
+    {
+        "label": "HTTP_404_NOT_FOUND",
+        "importPath": "starlette.status",
+        "description": "starlette.status",
+        "isExtraImport": true,
+        "detail": "starlette.status",
+        "documentation": {}
+    },
+    {
+        "label": "HTTP_500_INTERNAL_SERVER_ERROR",
+        "importPath": "starlette.status",
+        "description": "starlette.status",
+        "isExtraImport": true,
+        "detail": "starlette.status",
+        "documentation": {}
+    },
+    {
+        "label": "HTTP_409_CONFLICT",
+        "importPath": "starlette.status",
+        "description": "starlette.status",
+        "isExtraImport": true,
+        "detail": "starlette.status",
+        "documentation": {}
+    },
+    {
+        "label": "HTTP_501_NOT_IMPLEMENTED",
+        "importPath": "starlette.status",
+        "description": "starlette.status",
+        "isExtraImport": true,
+        "detail": "starlette.status",
+        "documentation": {}
+    },
+    {
+        "label": "ResponseStatus",
+        "importPath": "core.enums",
+        "description": "core.enums",
+        "isExtraImport": true,
+        "detail": "core.enums",
+        "documentation": {}
+    },
+    {
+        "label": "BaseSettings",
+        "importPath": "pydantic_settings",
+        "description": "pydantic_settings",
+        "isExtraImport": true,
+        "detail": "pydantic_settings",
+        "documentation": {}
+    },
+    {
+        "label": "register_tortoise",
+        "importPath": "tortoise.contrib.fastapi",
+        "description": "tortoise.contrib.fastapi",
+        "isExtraImport": true,
+        "detail": "tortoise.contrib.fastapi",
+        "documentation": {}
+    },
+    {
+        "label": "settings",
+        "importPath": "core.config",
+        "description": "core.config",
+        "isExtraImport": true,
+        "detail": "core.config",
+        "documentation": {}
+    },
+    {
+        "label": "settings",
+        "importPath": "core.config",
+        "description": "core.config",
+        "isExtraImport": true,
+        "detail": "core.config",
+        "documentation": {}
+    },
+    {
+        "label": "Enum",
+        "importPath": "enum",
+        "description": "enum",
+        "isExtraImport": true,
+        "detail": "enum",
+        "documentation": {}
+    },
+    {
+        "label": "time",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "time",
+        "description": "time",
+        "detail": "time",
+        "documentation": {}
+    },
+    {
+        "label": "jwt",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "jwt",
+        "description": "jwt",
+        "detail": "jwt",
+        "documentation": {}
+    },
+    {
+        "label": "CORSMiddleware",
+        "importPath": "fastapi.middleware.cors",
+        "description": "fastapi.middleware.cors",
+        "isExtraImport": true,
+        "detail": "fastapi.middleware.cors",
+        "documentation": {}
+    },
+    {
+        "label": "GZipMiddleware",
+        "importPath": "starlette.middleware.gzip",
+        "description": "starlette.middleware.gzip",
+        "isExtraImport": true,
+        "detail": "starlette.middleware.gzip",
+        "documentation": {}
+    },
+    {
+        "label": "TrustedHostMiddleware",
+        "importPath": "starlette.middleware.trustedhost",
+        "description": "starlette.middleware.trustedhost",
+        "isExtraImport": true,
+        "detail": "starlette.middleware.trustedhost",
+        "documentation": {}
+    },
+    {
+        "label": "HTTPSRedirectMiddleware",
+        "importPath": "starlette.middleware.httpsredirect",
+        "description": "starlette.middleware.httpsredirect",
+        "isExtraImport": true,
+        "detail": "starlette.middleware.httpsredirect",
+        "documentation": {}
+    },
+    {
+        "label": "SessionMiddleware",
+        "importPath": "starlette.middleware.sessions",
+        "description": "starlette.middleware.sessions",
+        "isExtraImport": true,
+        "detail": "starlette.middleware.sessions",
+        "documentation": {}
+    },
+    {
+        "label": "init_db",
+        "importPath": "core.database",
+        "description": "core.database",
+        "isExtraImport": true,
+        "detail": "core.database",
+        "documentation": {}
+    },
+    {
+        "label": "user_controller",
+        "importPath": "controllers",
+        "description": "controllers",
+        "isExtraImport": true,
+        "detail": "controllers",
+        "documentation": {}
+    },
+    {
+        "label": "APIResponse",
+        "kind": 6,
+        "importPath": "core.ResponseHandler",
+        "description": "core.ResponseHandler",
+        "peekOfCode": "class APIResponse:\n    \"\"\"\n    Factory for standardized API responses across the agency service.\n    Patterns:\n    - Success: {status, message, data, metadata}\n    - Error: {status, code, message, errors}\n    \"\"\"\n    @staticmethod\n    def success(\n        data: Any = None,",
+        "detail": "core.ResponseHandler",
+        "documentation": {}
+    },
+    {
+        "label": "Settings",
+        "kind": 6,
+        "importPath": "core.config",
+        "description": "core.config",
+        "peekOfCode": "class Settings(BaseSettings):\n    DEBUG: bool \n    APP_NAME: str\n    APP_ENV: str\n    DB_HOST: str\n    DB_PORT: int\n    DB_NAME: str\n    DB_USER: str\n    DB_PASSWORD: str\n    JWT_SECRET: str",
+        "detail": "core.config",
+        "documentation": {}
+    },
+    {
+        "label": "settings",
+        "kind": 5,
+        "importPath": "core.config",
+        "description": "core.config",
+        "peekOfCode": "settings = Settings()",
+        "detail": "core.config",
+        "documentation": {}
+    },
+    {
+        "label": "init_db",
+        "kind": 2,
+        "importPath": "core.database",
+        "description": "core.database",
+        "peekOfCode": "def init_db(app: FastAPI):\n    register_tortoise(\n        app,\n        db_url=DB_URL,\n        modules={\"models\": [\"app.models.user_model\"]},\n        generate_schemas=True,\n        add_exception_handlers=True,\n    )",
+        "detail": "core.database",
+        "documentation": {}
+    },
+    {
+        "label": "DB_URL",
+        "kind": 5,
+        "importPath": "core.database",
+        "description": "core.database",
+        "peekOfCode": "DB_URL = f\"postgres://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}\"\ndef init_db(app: FastAPI):\n    register_tortoise(\n        app,\n        db_url=DB_URL,\n        modules={\"models\": [\"app.models.user_model\"]},\n        generate_schemas=True,\n        add_exception_handlers=True,\n    )",
+        "detail": "core.database",
+        "documentation": {}
+    },
+    {
+        "label": "ResponseStatus",
+        "kind": 6,
+        "importPath": "core.enums",
+        "description": "core.enums",
+        "peekOfCode": "class ResponseStatus(str,Enum):\n    SUCCESS = \"success\"\n    FAILURE = \"failure\"\n    ERROR = \"error\"",
+        "detail": "core.enums",
+        "documentation": {}
+    },
+    {
+        "label": "AppMiddleware",
+        "kind": 6,
+        "importPath": "middlewares.middlewares",
+        "description": "middlewares.middlewares",
+        "peekOfCode": "class AppMiddleware:\n    \"\"\"\n    Classe pour centraliser l'ajout de middlewares FastAPI / Starlette.\n    \"\"\"\n    def __init__(self, app: FastAPI):\n        self.app = app\n    def configure(self):\n        \"\"\"\n        Ajoute tous les middlewares nécessaires à l'application.\n        \"\"\"",
+        "detail": "middlewares.middlewares",
+        "documentation": {}
+    },
+    {
+        "label": "AppMiddleware",
+        "kind": 6,
+        "importPath": "middlewares.middlewares",
+        "description": "middlewares.middlewares",
+        "peekOfCode": "class AppMiddleware:\n    \"\"\"\n    Classe pour ajouter middlewares FastAPI :\n    - Logging\n    - JWT Auth\n    \"\"\"\n    def __init__(self, app: FastAPI, jwt_secret: str):\n        self.app = app\n        self.jwt_secret = jwt_secret\n    def configure(self):",
+        "detail": "middlewares.middlewares",
+        "documentation": {}
+    },
+    {
+        "label": "app",
+        "kind": 5,
+        "importPath": "main",
+        "description": "main",
+        "peekOfCode": "app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)\n# Routes\napp.include_router(user_controller.router)\n# Init DB\ninit_db(app)",
+        "detail": "main",
+        "documentation": {}
+    }
+]
