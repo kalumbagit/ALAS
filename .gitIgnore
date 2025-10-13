@@ -1,0 +1,6 @@
+.vscode
+core/__pycache__
+models/__pycache__
+migrations
+pyproject.toml
+.env

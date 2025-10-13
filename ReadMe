@@ -1,4 +1,3 @@
-
 # ALAS1 – Service Gestion des Utilisateurs
 
 **Nom du projet :** ALAS1
@@ -11,12 +10,12 @@
 
 ALAS1 est le **service central de gestion des utilisateurs** pour l’application de livraison. Il gère toutes les fonctionnalités liées aux utilisateurs, y compris :
 
-* Création, modification et suppression de comptes
-* Gestion des types d’utilisateurs (clients, marchands, livreurs)
-* Authentification (login / logout / JWT)
-* Hachage sécurisé des mots de passe
-* Activation et désactivation des comptes
-* Suivi des localisations utilisateurs (pour livreurs ou marchands)
+- Création, modification et suppression de comptes
+- Gestion des types d’utilisateurs (clients, marchands, livreurs)
+- Authentification (login / logout / JWT)
+- Hachage sécurisé des mots de passe
+- Activation et désactivation des comptes
+- Suivi des localisations utilisateurs (pour livreurs ou marchands)
 
 Ce service constitue la **base utilisateur** sur laquelle tous les autres services interconnectés d’ALAS vont s’appuyer.
 
@@ -56,7 +55,7 @@ app/
 | **fastapi-jwt-auth** | Gestion JWT pour authentification       |
 | **bcrypt**           | Hachage sécurisé des mots de passe      |
 
-*(Voir `requirements.txt` pour la liste complète)*
+_(Voir `requirements.txt` pour la liste complète)_
 
 ---
 
@@ -83,8 +82,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 4. **Accéder à la documentation interactive**
 
-* Swagger UI : [http://localhost:8000/docs](http://localhost:8000/docs)
-* ReDoc : [http://localhost:8000/redoc](http://localhost:8000/redoc)
+- Swagger UI : [http://localhost:8000/docs](http://localhost:8000/docs)
+- ReDoc : [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
 ---
 
@@ -100,8 +99,8 @@ pytest -v
 
 ## 7. Branches Git
 
-* Branche principale : `main`
-* Branche de développement du service utilisateur : `ALAS1`
+- Branche principale : `main`
+- Branche de développement du service utilisateur : `ALAS1`
 
 ```bash
 git switch -c ALAS1
@@ -111,15 +110,32 @@ git switch -c ALAS1
 
 ## 8. Contribution
 
-* Chaque modification doit être effectuée sur **une branche dédiée** basée sur `ALAS1`.
-* Respecter la structure de dossiers et les conventions de code Python / FastAPI.
-* Ajouter des tests pour chaque nouvelle fonctionnalité.
+- Chaque modification doit être effectuée sur **une branche dédiée** basée sur `ALAS1`.
+- Respecter la structure de dossiers et les conventions de code Python / FastAPI.
+- Ajouter des tests pour chaque nouvelle fonctionnalité.
 
 ---
 
 ## 9. Liens utiles
 
-* [FastAPI Documentation](https://fastapi.tiangolo.com/)
-* [Tortoise ORM](https://tortoise-orm.readthedocs.io/)
-* [FastAPI JWT Auth](https://pypi.org/project/fastapi-jwt-auth/)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/fr/)
+- [Tortoise ORM](https://tortoise.github.io/)
+- [FastAPI JWT Auth](https://pypi.org/project/fastapi-jwt-auth/)
 
+#####
+###       Migrations                  ############################## 
+
+# 1. Initialiser Aerich (à faire une seule fois)
+aerich init -t core.config.TORTOISE_ORM
+
+# 2. Créer la première migration
+aerich init-db
+
+# 3. Quand tu modifies tes modèles
+aerich migrate --name "add_deliverer_referral_system"
+
+# 4. Appliquer les migrations à la base
+aerich upgrade
+
+# 5. (optionnel) Revenir en arrière
+aerich downgrade
