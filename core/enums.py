@@ -32,6 +32,7 @@ class IdentityType(Enum):
     PASSPORT="passport"
     DRIVER_LICENSE="driver_license"
     ELECTORAL_CARD="electoral_card"
+    CNI_RECEIPT="recépicé de la cni"
     OTHER="other"
 
 class VerificationMethod(Enum):
@@ -39,4 +40,14 @@ class VerificationMethod(Enum):
     SELFIE_MATCH="selfie_match"  # Correspondance avec un selfie
     OTP_ONLY="otp_only"  # Vérification par OTP uniquement
     SPONSORED="sponsored"  # Vérification par un tiers sponsorisé
+
+class EarningStatus(Enum):
+    PENDING="pending"
+    COMPLETED="completed"
+    FAILED="failed"
+    CANCELLED="cancelled"
+    REFUNDED="refunded"
+    ADJUSTED="adjusted"
+
+CURENCY="FCFA"
     

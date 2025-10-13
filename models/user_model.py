@@ -6,7 +6,7 @@ Chaque modèle est géré par Tortoise ORM et suit une approche normalisée.
 
 from tortoise.models import Model
 from tortoise import fields
-from core.enums import UserType, BusinessType,VehicleType,IdentityType,VerificationMethod
+from core.enums import UserType, BusinessType,VehicleType,IdentityType,VerificationMethod,EarningStatus,CURENCY
 from datetime import datetime,timezone
 
 
@@ -256,13 +256,14 @@ class DelivererEarnings(Model):
     amount = fields.DecimalField(max_digits=10, decimal_places=2)
     is_advance_payment = fields.BooleanField(default=False, description="True si payé à l'avance")
     description = fields.TextField(null=True, description="Motif ou détail du paiement")
-    status = fields.CharField(
-        max_length=20,
-        default="pending",  # valeurs possibles: pending, confirmed, refunded
+    status = fields.CharEnumField(
+        enum_type=VehicleType, 
+        default=EarningStatus.PENDING,
         description="Statut du paiement"
     )
+    
     payment_date = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.deliverer.user.first_name} - {self.amount}€ ({'avance' if self.is_advance_payment else 'normal'})"
+        return f"{self.deliverer.user.first_name} - {self.amount} {CURENCY} ({'avance' if self.is_advance_payment else 'normal'})"
