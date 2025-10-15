@@ -1,6 +1,7 @@
 from typing import Any, Dict, Optional, List
-from fastapi.responses import JSONResponse as DRFResponse
+from fastapi.responses import JSONResponse as FAPIResponse
 from fastapi import Response
+from pydantic import BaseModel
 
 from starlette.status import (
     HTTP_200_OK,
@@ -25,7 +26,15 @@ class APIResponse:
     - Success: {status, message, data, metadata}
     - Error: {status, code, message, errors}
     """
-    
+    @staticmethod
+    def _serialize_data(data: Any):
+        """Convertit automatiquement les modèles Pydantic ou ORM en dict."""
+        if isinstance(data, BaseModel):
+            return data.model_dump()
+        elif isinstance(data, list):
+            return [APIResponse._serialize_data(item) for item in data]
+        return data
+
     @staticmethod
     def success(
         data: Any = None,
@@ -33,7 +42,7 @@ class APIResponse:
         metadata: Optional[Dict] = None,
         status_code: int = HTTP_200_OK,
         headers: Optional[Dict] = None
-    ) -> DRFResponse:
+    ) -> FAPIResponse:
         """
         Standard success response.
         
@@ -51,14 +60,14 @@ class APIResponse:
                 status_code=status.HTTP_201_CREATED
             )
         """
-        return DRFResponse(
+        return FAPIResponse(
             {
                 'status': ResponseStatus.SUCCESS.value,
                 'message': message,
                 'data': data,
                 'metadata': metadata or {}
             },
-            status=status_code,
+            status_code=status_code,
             headers=headers
         )
 
@@ -67,7 +76,7 @@ class APIResponse:
         message: str = None,
         metadata: Optional[Dict] = None,
         status_code: int = HTTP_500_INTERNAL_SERVER_ERROR,
-    ) -> DRFResponse:
+    ) -> FAPIResponse:
         """
         Standard error response.
         
@@ -85,13 +94,13 @@ class APIResponse:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         """
-        return DRFResponse(
+        return FAPIResponse(
             {
                 'status': ResponseStatus.SUCCESS.value,
                 'message': message,
                 'metadata': metadata or {}
             },
-            status=status_code,
+            status_code=status_code,
         )
 
     @staticmethod
@@ -101,9 +110,11 @@ class APIResponse:
         page: int,
         page_size: int,
         message: str = "Data retrieved successfully"
-    ) -> DRFResponse:
+    ) -> FAPIResponse:
         
-        return DRFResponse(
+        
+        
+        return FAPIResponse(
             {
                 'status': ResponseStatus.SUCCESS.value,
                 'message': message,
@@ -120,14 +131,13 @@ class APIResponse:
             status_code=HTTP_200_OK
         )
 
-    
     @staticmethod
     def created(
         data: Any = None,
         message: str = "Resource created successfully",
         location: str = None,
         headers: Optional[Dict] = None
-    ) -> DRFResponse:
+    ) -> FAPIResponse:
         """
         201 Created response with location header.
         
@@ -135,15 +145,16 @@ class APIResponse:
             location: URI of the created resource
         """
         headers = headers or {}
+        serialized_data = APIResponse._serialize_data(data)
         if location:
             headers['Location'] = location
-        return DRFResponse(
+        return FAPIResponse(
             {
                 "status": ResponseStatus.SUCCESS.value,
                 "message": message,
-                "data": data
+                "data": serialized_data
             },
-            status=HTTP_201_CREATED,
+            status_code=HTTP_201_CREATED,
             headers=headers
         )
 
@@ -159,68 +170,68 @@ class APIResponse:
         message: str = "Invalid request",
         errors: Optional[Dict] = None,
         code: Optional[str] = None
-    ) -> DRFResponse:
+    ) -> FAPIResponse:
         """400 Bad Request with validation details."""
-        return DRFResponse(
+        return FAPIResponse(
             {
                 "status": ResponseStatus.FAILURE.value,
                 "code": code or "VALIDATION_ERROR",
                 "message": message,
                 "errors": errors or {}
             },
-            status=HTTP_400_BAD_REQUEST
+            status_code=HTTP_400_BAD_REQUEST
         )
 
     @staticmethod
     def unauthorized(
         message: str = "Authentication required",
         code: str = "AUTH_REQUIRED"
-    ) -> DRFResponse:
+    ) -> FAPIResponse:
         """401 Unauthorized response."""
-        return DRFResponse(
+        return FAPIResponse(
             {
                 "status": ResponseStatus.FAILURE.value,
                 "code": code,
                 "message": message
             },
-            status=HTTP_401_UNAUTHORIZED
+            status_code=HTTP_401_UNAUTHORIZED
         )
 
     @staticmethod
     def forbidden(
         message: str = "Insufficient permissions",
         code: str = "PERMISSION_DENIED"
-    ) -> DRFResponse:
+    ) -> FAPIResponse:
         """403 Forbidden response."""
-        return DRFResponse(
+        return FAPIResponse(
             {
                 "status": ResponseStatus.FAILURE.value,
                 "code": code,
                 "message": message
             },
-            status=HTTP_403_FORBIDDEN
+            status_code=HTTP_403_FORBIDDEN
         )
 
     @staticmethod
     def not_found(
         resource: str = "Resource",
         code: str = "NOT_FOUND"
-    ) -> DRFResponse:
+    ) -> FAPIResponse:
         """404 Not Found response."""
-        return DRFResponse(
+        return FAPIResponse(
             {
                 "status": ResponseStatus.FAILURE.value,
                 "code": code,
                 "message": f"{resource} not found"
             },
-            status=HTTP_404_NOT_FOUND
+            status_code=HTTP_404_NOT_FOUND
         )
 
     @staticmethod
     def internal_error(
         message: str = "Internal server error",
         code: Optional[str] = "INTERNAL_ERROR"
-    ) -> DRFResponse:
+    ) -> FAPIResponse:
         """500 Internal Server Error with optional tracking ID."""
         response = {
             "status": ResponseStatus.ERROR.value,
@@ -228,21 +239,21 @@ class APIResponse:
             "message": message
         }
             
-        return DRFResponse(response, status=HTTP_500_INTERNAL_SERVER_ERROR)
+        return FAPIResponse(response, status_code=HTTP_500_INTERNAL_SERVER_ERROR)
 
     @staticmethod
     def conflict(
         message: str = "Resource conflict",
         code: str = "CONFLICT"
-    ) -> DRFResponse:
+    ) -> FAPIResponse:
         """409 Conflict response."""
-        return DRFResponse(
+        return FAPIResponse(
             {
                 "status": ResponseStatus.FAILURE.value,
                 "code": code,
                 "message": message
             },
-            status=HTTP_409_CONFLICT
+            status_code=HTTP_409_CONFLICT
         )
 
     @staticmethod
@@ -250,7 +261,7 @@ class APIResponse:
         feature: str = "This feature",
         code: str = "NOT_IMPLEMENTED",
         roadmap_link: str = None
-    ) -> DRFResponse:
+    ) -> FAPIResponse:
         """
         501 Not Implemented response.
         """
@@ -262,8 +273,8 @@ class APIResponse:
         if roadmap_link:
             payload['roadmap'] = roadmap_link
             
-        return DRFResponse(
+        return FAPIResponse(
             payload,
-            status=HTTP_501_NOT_IMPLEMENTED
+            status_code=HTTP_501_NOT_IMPLEMENTED
         )
 

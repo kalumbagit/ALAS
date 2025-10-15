@@ -9,7 +9,6 @@ from tortoise import fields
 from core.enums import UserType, BusinessType,VehicleType,IdentityType,VerificationMethod,EarningStatus,CURENCY
 from datetime import datetime,timezone
 
-
 # ==============================
 # 👤 Utilisateur principal
 # ==============================
@@ -84,7 +83,6 @@ class Merchant(Model):
 
     def __str__(self):
         return f"{self.business_name} ({self.business_type})"
-
 
 # ==============================
 # 🚴‍♂️ Détails du livreur
@@ -267,3 +265,4 @@ class DelivererEarnings(Model):
 
     def __str__(self):
         return f"{self.deliverer.user.first_name} - {self.amount} {CURENCY} ({'avance' if self.is_advance_payment else 'normal'})"
+

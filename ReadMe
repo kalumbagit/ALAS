@@ -123,19 +123,51 @@ git switch -c ALAS1
 - [FastAPI JWT Auth](https://pypi.org/project/fastapi-jwt-auth/)
 
 #####
-###       Migrations                  ############################## 
+
+### Migrations
 
 # 1. Initialiser Aerich (à faire une seule fois)
+
 aerich init -t core.config.TORTOISE_ORM
 
 # 2. Créer la première migration
+
 aerich init-db
 
 # 3. Quand tu modifies tes modèles
+
 aerich migrate --name "add_deliverer_referral_system"
 
 # 4. Appliquer les migrations à la base
+
 aerich upgrade
 
 # 5. (optionnel) Revenir en arrière
+
 aerich downgrade
+
+###
+
+### Pytest
+
+###
+
+# Tous les tests
+
+pytest
+
+# Tests avec couverture
+
+pytest --cov=services --cov-report=html
+
+# Tests spécifiques
+
+pytest tests/test_user_service.py -v
+
+# Tests d'intégration seulement
+
+pytest -m integration
+
+# Exclure les tests lents
+
+pytest -m "not slow"
