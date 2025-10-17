@@ -11,7 +11,9 @@ class Settings(BaseSettings):
 
     # --- App ---
     APP_NAME: str
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str
+    APP_TYPE:str  # renseigne sur le type de l'application:  c'est une api ou un mvc ou autre
+    API_VERSION:str
     APP_ENV: str 
     APP_PORT: int
     DEBUG: bool
@@ -39,6 +41,13 @@ class Settings(BaseSettings):
 
     # --- DB URL générée dynamiquement ---
     DB_URL: str | None = None
+
+    # --- Minio depencencies----
+    MINIO_ENDPOINT:str
+    MINIO_ACCESS_KEY:str
+    MINIO_SECRET_KEY:str
+    MINIO_SECURE:bool
+    MINIO_BUCKET_DELIVERER_IDENTITY:str
 
     @validator("DB_URL", pre=True, always=True)
     def build_db_url(cls, v, values):

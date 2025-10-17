@@ -16,7 +16,9 @@ from core import security # 👈 IMPORT INDISPENSABLE ici POUR LA GESTION DE LA 
 from controllers import (
     user_controller, 
     auth_controller,
-    health_controller
+    health_controller,
+    deliverer_controller,
+    merchant_controller
 )
 
 # Configuration du logging
@@ -151,18 +153,18 @@ def create_application() -> FastAPI:
                     "Format : `Bearer <access_token>`"
                 )
             },
-            "BearerRefreshAuth": {
-                "type": "http",
-                "scheme": "bearer",
-                "bearerFormat": "JWT",
+            "RefreshHeaderAuth": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-Refresh-Token",
                 "description": (
-                    "♻️ **Refresh Token JWT** — utilisé uniquement pour régénérer un access token.\n\n"
-                    "Format : `Bearer <refresh_token>`"
-                )
-            }
+                    "♻️ **Refresh Token JWT** — à fournir dans le header `X-Refresh-Token`.\n\n"
+                    "Format : `<refresh_token>`"
+                ),
+            },
         }
         # Applique-le globalement aux routes protégées
-        openapi_schema["security"] = [{"BearerAuth": []}]
+        openapi_schema["security"] = [{"BearerAccessAuth": []}]
         app.openapi_schema = openapi_schema
         return app.openapi_schema
 
@@ -209,25 +211,42 @@ def _setup_routers(app: FastAPI) -> None:
     # Routes API v1 (pour future versioning)
     app.include_router(
         health_controller.router,
-        prefix="/api/v1/health",
+        prefix=f"/{settings.APP_TYPE}/{settings.API_VERSION}/health",
         tags=["Health"]
     )
     
     app.include_router(
         user_controller.router,
-        prefix="/api/v1", 
-        tags=["Users"]
+        prefix=f"/{settings.APP_TYPE}/{settings.API_VERSION}", 
     )
 
     app.include_router(
         user_controller.admin_router,
-        prefix="/api/v1", 
+        prefix=f"/{settings.APP_TYPE}/{settings.API_VERSION}", 
+    )
+    app.include_router(
+        deliverer_controller.router,
+        prefix=f"/{settings.APP_TYPE}/{settings.API_VERSION}", 
+    )
+
+    app.include_router(
+        deliverer_controller.admin_router,
+        prefix=f"/{settings.APP_TYPE}/{settings.API_VERSION}", 
+    )
+
+    app.include_router(
+        merchant_controller.router,
+        prefix=f"/{settings.APP_TYPE}/{settings.API_VERSION}", 
+    )
+
+    app.include_router(
+        merchant_controller.admin_router,
+        prefix=f"/{settings.APP_TYPE}/{settings.API_VERSION}", 
     )
 
     app.include_router(
         auth_controller.router, 
-        prefix="/api/v1",
-        tags=["Authentication"]
+        prefix=f"/{settings.APP_TYPE}/{settings.API_VERSION}",
     )
     
 def _setup_exception_handlers(app: FastAPI) -> None:
@@ -360,6 +379,8 @@ async def root() -> Dict[str, Any]:
         "data": {
             "message": f"Bienvenue sur {settings.APP_NAME}",
             "version": settings.APP_VERSION,
+            "APP_TYPE":settings.APP_TYPE,
+            "API_VERSION":settings.API_VERSION,
             "APP_ENV": settings.APP_ENV,
             "status": "operational",
             "documentation": "/docs" if settings.DEBUG else None

@@ -51,3 +51,11 @@ class EarningStatus(Enum):
 
 CURENCY="FCFA"
     
+class WithdrawalStatus(str, Enum):
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    REJECTED = "REJECTED"
+
+class WithdrawalMethod(str, Enum):
+    MOBILE_MONEY = "MOBILE_MONEY"
+    BANK_TRANSFER = "BANK_TRANSFER"

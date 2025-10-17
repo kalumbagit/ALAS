@@ -6,7 +6,17 @@ Chaque modèle est géré par Tortoise ORM et suit une approche normalisée.
 
 from tortoise.models import Model
 from tortoise import fields
-from core.enums import UserType, BusinessType,VehicleType,IdentityType,VerificationMethod,EarningStatus,CURENCY
+from core.enums import (
+    UserType, 
+    BusinessType,
+    VehicleType,
+    IdentityType,
+    VerificationMethod,
+    EarningStatus,
+    CURENCY,
+    WithdrawalStatus,
+    WithdrawalMethod
+)
 from datetime import datetime,timezone
 
 # ==============================
@@ -24,8 +34,9 @@ class User(Model):
     last_name = fields.CharField(max_length=30)
     user_type = fields.CharEnumField(UserType, default=UserType.CUSTOMER)
     avatar_url = fields.CharField(max_length=255, null=True)
-    is_verified = fields.BooleanField(default=False)
+    is_verified = fields.BooleanField(default=True)
     is_active = fields.BooleanField(default=True)
+    is_superuser = fields.BooleanField(default=False)
     rating = fields.FloatField(default=0.0)
     total_ratings = fields.IntField(default=0)
     created_at = fields.DatetimeField(auto_now_add=True)
@@ -33,7 +44,6 @@ class User(Model):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.user_type})"
-
 
 # ==============================
 # 📍 Localisation utilisateur
@@ -102,34 +112,24 @@ class DelivererDetails(Model):
     suspension_reason = fields.TextField(null=True)
 
     # Informations sur les gains
-    total_earnings = fields.FloatField(default=0.0)
+    total_earnings = fields.FloatField(default=0.0) # 💰 gains liés aux livraisons
     referral_earnings = fields.FloatField(default=0.0)  # 💰 gains liés au parrainage
     completed_deliveries = fields.IntField(default=0)
 
     # Vérification d'identité
-    identity_type = fields.CharEnumField(
-        enum_type=IdentityType, default=IdentityType.OTHER
-    )
+    identity_type = fields.CharEnumField(enum_type=IdentityType, default=IdentityType.OTHER)
     identity_document_url = fields.CharField(max_length=255, null=True)
     selfie_photo_url = fields.CharField(max_length=255, null=True)
     identity_code = fields.CharField(max_length=100, null=True)
     identity_verified = fields.BooleanField(default=False)
-    verification_method = fields.CharEnumField(
-        enum_type=VerificationMethod, default=VerificationMethod.MANUAL
-    )
+    verification_method = fields.CharEnumField(enum_type=VerificationMethod, default=VerificationMethod.MANUAL)
     verified_by = fields.CharField(max_length=100, null=True)
     verification_date = fields.DatetimeField(null=True)
 
     # Localisation et véhicule
-    vehicle_type = fields.CharEnumField(
-        enum_type=VehicleType, default=VehicleType.WALKING
-    )
-    current_latitude = fields.DecimalField(
-        max_digits=9, decimal_places=6, null=True
-    )
-    current_longitude = fields.DecimalField(
-        max_digits=9, decimal_places=6, null=True
-    )
+    vehicle_type = fields.CharEnumField(enum_type=VehicleType, default=VehicleType.WALKING)
+    current_latitude = fields.DecimalField(max_digits=9, decimal_places=6, null=True)
+    current_longitude = fields.DecimalField(max_digits=9, decimal_places=6, null=True)
 
     # Parrainage (self-relation)
     sponsor = fields.ForeignKeyField(
@@ -141,9 +141,14 @@ class DelivererDetails(Model):
     referral_code = fields.CharField(max_length=20, unique=True, null=True)
     total_referrals = fields.IntField(default=0)
 
+    # ---- Retraits du livreur ----
+    pending_withdrawal_amount = fields.FloatField(default=0.0, description="Montant total en attente de retrait")
+    total_withdrawn = fields.FloatField(default=0.0, description="Montant total déjà retiré")
+
     # Métadonnées
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
+    last_online_update=fields.DatetimeField(auto_now=True)
 
     # Relation principale
     user = fields.ForeignKeyField(
@@ -162,18 +167,16 @@ class DelivererDetails(Model):
         if not self.identity_verified:
             raise ValueError("Impossible de se mettre en ligne : identité non vérifiée.")
         self.is_online = True
-        self.updated_at = datetime.now(timezone.utc)
         await self.save()
-        return {"message": f"Le livreur {self.user.first_name} est maintenant en ligne."}
+        return {"online": True}
 
     async def go_offline(self):
         """
         Met le livreur hors ligne.
         """
         self.is_online = False
-        self.updated_at = datetime.now(timezone.utc)
         await self.save()
-        return {"message": f"Le livreur {self.user.first_name} est maintenant hors ligne."}
+        return {"online": False}
 
     # -----------------------
     # 🧾 Vérification identité
@@ -189,9 +192,19 @@ class DelivererDetails(Model):
         self.verification_method = VerificationMethod.MANUAL
         self.verified_by = admin_identifier
         self.verification_date = datetime.now(timezone.utc)
-        self.updated_at = datetime.now(timezone.utc)
         await self.save()
-        return {"message": f"Identité du livreur {self.user.first_name} vérifiée avec succès."}
+        return {"identity_verified": True}
+
+    #---------------------------------
+    # solde disponible
+    #---------------------------------
+    @property
+    def available_balance(self) -> float:
+        """
+        Solde disponible pour retrait :
+        total_earnings - (total_withdrawn + pending_withdrawal_amount)
+        """
+        return max(self.total_earnings - (self.total_withdrawn + self.pending_withdrawal_amount), 0.0)
 
     # -----------------------
     # 🤝 Gestion des parrainages
@@ -204,20 +217,15 @@ class DelivererDetails(Model):
             raise ValueError("Un livreur ne peut pas se parrainer lui-même.")
 
         new_deliverer.sponsor = self
-        new_deliverer.updated_at = datetime.now(timezone.utc)
         await new_deliverer.save()
 
         # Prime de parrainage
         self.total_referrals += 1
-        self.referral_earnings += 100.0
-        self.total_earnings += 100.0
+        bonus = 100.0
+        self.referral_earnings += bonus
         await self.save()
 
-        return {
-            "message": f"{self.user.first_name} a parrainé {new_deliverer.user.first_name}.",
-            "bonus": 100.0,
-            "total_referrals": self.total_referrals,
-        }
+        return {"bonus": bonus, "total_referrals": self.total_referrals}
 
     async def get_referral_history(self):
         """
@@ -234,6 +242,11 @@ class DelivererDetails(Model):
             for r in referrals
         ]
 
+    async def get_referral_count(self):
+        """Retourne le nombre de filleuls."""
+        return await DelivererDetails.filter(sponsor=self).count()
+
+
     def __str__(self):
         return f"Livreur: {self.user.first_name} ({self.vehicle_type})"
 
@@ -246,11 +259,21 @@ class DelivererEarnings(Model):
     les bonus et le statut du règlement.
     """
     id = fields.UUIDField(pk=True)
+
     deliverer = fields.ForeignKeyField(
         "models.DelivererDetails",
         related_name="earnings",
         on_delete=fields.CASCADE
     )
+
+    # Référence vers la livraison (sans liaison directe)
+    delivery_reference = fields.CharField(
+        max_length=100,
+        null=True,
+        unique=True,  # 👉 garantit qu'une même livraison ne crée pas deux transactions
+        description="Identifiant de la livraison associée (non lié directement)"
+    )
+
     amount = fields.DecimalField(max_digits=10, decimal_places=2)
     is_advance_payment = fields.BooleanField(default=False, description="True si payé à l'avance")
     description = fields.TextField(null=True, description="Motif ou détail du paiement")
@@ -266,3 +289,35 @@ class DelivererEarnings(Model):
     def __str__(self):
         return f"{self.deliverer.user.first_name} - {self.amount} {CURENCY} ({'avance' if self.is_advance_payment else 'normal'})"
 
+#===============================
+# retraits du livreurs
+#===============================
+class DelivererWithdrawal(Model):
+    """
+    Historique des retraits effectués par un livreur.
+    Chaque retrait représente une transaction sortante validée.
+    """
+    id = fields.UUIDField(pk=True)
+    deliverer = fields.ForeignKeyField(
+        "models.DelivererDetails",
+        related_name="withdrawals",
+        on_delete=fields.CASCADE
+    )
+    amount = fields.DecimalField(max_digits=10, decimal_places=2)
+    reference = fields.CharField(max_length=100, unique=True, description="Référence unique du retrait")
+    status = fields.CharEnumField(
+        enum_type=WithdrawalStatus,
+        default=WithdrawalStatus.PENDING,
+        description="Statut du retrait"
+    )
+    method = fields.CharEnumField(
+        enum_type=WithdrawalMethod,
+        default=WithdrawalMethod.MOBILE_MONEY,
+        description="Méthode de retrait utilisée"
+    )
+    created_at = fields.DatetimeField(auto_now_add=True)
+    updated_at = fields.DatetimeField(auto_now=True)
+    processed_at = fields.DatetimeField(null=True, description="Date effective du retrait")
+
+    def __str__(self):
+        return f"Retrait {self.reference} - {self.amount} ({self.status})"

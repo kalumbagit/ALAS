@@ -1,6 +1,6 @@
 # Standard library
-from datetime import datetime, timezone
-from typing import Dict, Optional
+from datetime import datetime
+from typing import Optional
 
 # Third-party libraries
 from fastapi import HTTPException
@@ -11,7 +11,7 @@ from tortoise.exceptions import DoesNotExist,OperationalError
 import jwt
 
 # Local application imports
-from models.user_model import User
+from models.user_model import User,DelivererDetails,Merchant,UserType
 from schemas.user_schema import (
     LoginDataSchema,
     LoginResponseSchema,
@@ -69,6 +69,60 @@ class AuthService:
             return None
     
     # ------------------------------
+    # 🧩 Vérifications internes selon type utilisateur
+    # ------------------------------
+    async def _validate_customer(self, user: User):
+        """Validation spécifique pour un client."""
+        if hasattr(user, "is_verified") and not user.is_verified:
+            raise UnauthorizedException(detail="Veuillez vérifier votre adresse e-mail avant de vous connecter.")
+        if hasattr(user, "is_active") and not user.is_active:
+            raise UnauthorizedException(detail="Compte désactivé. Contactez l’administrateur.")
+
+    async def _validate_deliverer(self, user: User):
+        """Validation spécifique pour un livreur."""
+        deliverer = await DelivererDetails.get_or_none(user=user)
+        if not deliverer:
+            raise UnauthorizedException(detail="Compte livreur introuvable.")
+        if not deliverer.identity_verified:
+            raise UnauthorizedException(detail="Votre compte livreur n’a pas encore été vérifié.")
+        if deliverer.is_suspended:
+            raise UnauthorizedException(detail="Votre compte livreur est suspendu.")
+        if not user.is_active:
+            raise UnauthorizedException(detail="Compte livreur inactif.")
+
+    async def _validate_merchant(self, user: User):
+        """Validation spécifique pour un marchand."""
+        merchant = await Merchant.get_or_none(user=user)
+        if not merchant:
+            raise UnauthorizedException(detail="Compte marchand introuvable.")
+        if not merchant.is_verified:
+            raise UnauthorizedException(detail="Votre compte marchand n’a pas encore été validé.")
+        if not user.is_active:
+            raise UnauthorizedException(detail="Compte marchand inactif.")
+
+    async def _validate_admin(self, user: User):
+        """Validation spécifique pour un administrateur."""
+        if not user.is_active:
+            raise UnauthorizedException(detail="Compte administrateur désactivé.")
+        if not user.is_superuser:
+            raise UnauthorizedException(detail="Accès refusé : cet utilisateur n’a pas les droits administrateur.")
+
+
+    async def _validate_user_by_type(self, user: User):
+        """Dirige la validation vers la méthode adaptée selon le type utilisateur."""
+        match user.user_type:
+            case UserType.CUSTOMER:
+                await self._validate_customer(user)
+            case UserType.DELIVERER:
+                await self._validate_deliverer(user)
+            case UserType.MERCHANT:
+                await self._validate_merchant(user)
+            case UserType.ADMIN:
+                await self._validate_admin(user)
+            case _:
+                raise UnauthorizedException(detail="Type d’utilisateur non reconnu.")
+    
+    # ------------------------------
     # Login / Logout / Refresh
     # ------------------------------
     async def login(self, data: LoginDataSchema,auth_jwt: AuthJWT) -> LoginResponseSchema:
@@ -76,26 +130,26 @@ class AuthService:
         Authentifie un utilisateur et génère les tokens JWT avec gestion robuste des erreurs.
         """
         try:
-            # Authentification de l'utilisateur
+            # 1️⃣ Authentification basique
             user = await self.authenticate_user(data)
             if not user:
                 logger.warning(f"Tentative de connexion échouée pour {data.email}")
                 raise UnauthorizedException(detail="Email ou mot de passe incorrect")
 
-            # Vérifie si le compte est actif
-            if hasattr(user, "is_active") and not user.is_active:
-                logger.info(f"Tentative de connexion sur compte inactif : {data.email}")
-                raise UnauthorizedException(detail="Compte désactivé. Contactez l’administrateur.")
-
-            # Vérifie si l'adresse e-mail est confirmée (si applicable)
-            if hasattr(user, "is_verified") and not user.is_verified:
-                logger.info(f"Connexion refusée : email non vérifié pour {data.email}")
-                raise UnauthorizedException(detail="Veuillez vérifier votre adresse e-mail avant de vous connecter.")
+            # 2️⃣ Validation selon le type d’utilisateur
+            await self._validate_user_by_type(user)
 
             # Génération des tokens JWT
             try:
-                access_token = auth_jwt.create_access_token(subject=str(user.id))
-                refresh_token = auth_jwt.create_refresh_token(subject=str(user.id))
+                access_token = auth_jwt.create_access_token(
+                    subject=str(user.id),
+                    user_claims={"usertype": user.user_type.value}  # ajoute le type utilisateur
+                )
+
+                refresh_token = auth_jwt.create_refresh_token(
+                    subject=str(user.id),
+                    user_claims={"usertype": user.user_type.value}  # idem
+                )
             except Exception as e:
                 logger.error(f"Erreur lors de la génération du token JWT pour {data.email} : {e}")
                 raise InternalServerException(detail="Erreur lors de la création du token")
@@ -128,28 +182,71 @@ class AuthService:
             logger.exception(f"Erreur inattendue lors du login de {data.email} : {e}")
             raise InternalServerException(detail="Erreur interne lors de l’authentification")
 
-    async def logout(self, auth_jwt: AuthJWT) -> dict:
+    async def logout(self, auth_jwt: AuthJWT,access_token: str, refresh_token: str) -> dict:
+        """
+        Déconnecte l'utilisateur en révoquant les deux tokens (access + refresh).
+        Les deux tokens sont attendus dans les headers :
+        - Authorization: Bearer <access_token>
+        - X-Refresh-Token: <refresh_token>
+        """
         try:
-            # Vérifie la présence et la validité du refresh token
-            auth_jwt.jwt_refresh_token_required()
-            raw_refresh_jwt = auth_jwt.get_raw_jwt()
-            refresh_jti = raw_refresh_jwt.get("jti")
-            refresh_exp = raw_refresh_jwt.get("exp")
+
+            # --------------------------------------------------------------------
+            # 1️⃣ Décodage du refresh token
+            # --------------------------------------------------------------------
+            if not refresh_token:
+                raise UnauthorizedException(detail="Refresh token manquant")
+
+            try:
+                decoded_refresh = auth_jwt._verified_token(refresh_token)
+            except Exception as e:
+                logger.warning(f"Refresh token invalide : {e}")
+                raise UnauthorizedException(detail="Refresh token invalide ou expiré")
+
+            refresh_jti = decoded_refresh.get("jti")
+            refresh_exp = decoded_refresh.get("exp")
 
             if not refresh_jti or not refresh_exp:
-                logger.warning("Tokens incomplets ou invalides lors du logout")
-                raise UnauthorizedException(detail="Token(s) invalide(s)")
+                raise UnauthorizedException(detail="Refresh token mal formé")
+            
+            # --------------------------------------------------------------------
+            # 2️⃣ Décodage du access token
+            # --------------------------------------------------------------------
+            if not access_token:
+                raise UnauthorizedException(detail="Access token manquant")
 
-            # Convertir en timestamp si nécessaire
+            try:
+                decoded_access = auth_jwt._verified_token(access_token)
+            except Exception as e:
+                logger.warning(f"Access token invalide : {e}")
+                raise UnauthorizedException(detail="Access token invalide ou expiré")
+
+            access_jti = decoded_access.get("jti")
+            access_exp = decoded_access.get("exp")
+
+            if not access_jti or not access_exp:
+                raise UnauthorizedException(detail="Access token mal formé")
+
+            # --------------------------------------------------------------------
+            # 3️⃣ Révocation dans Redis
+            # --------------------------------------------------------------------
+            from core.redis import revoke_token
+
+            # Conversion timestamps
+            access_exp_ts = int(access_exp) if isinstance(access_exp, int) else int(datetime.timestamp(access_exp))
             refresh_exp_ts = int(refresh_exp) if isinstance(refresh_exp, int) else int(datetime.timestamp(refresh_exp))
 
-            # 🔥 Stockage dans Redis ou table des tokens révoqués
-            from core.redis import revoke_token
+            await revoke_token(access_jti, access_exp_ts)
             await revoke_token(refresh_jti, refresh_exp_ts)
 
-            logger.info(f"Tokens révoqués avec succès : refresh_jti={refresh_jti}")
+
+            logger.info(f"✅ Tokens révoqués : access_jti={access_jti}, refresh_jti={refresh_jti}")
 
             return {"detail": "Déconnexion réussie, tous les tokens révoqués"}
+        
+        # --------------------------------------------------------------------
+        # 3️⃣ Révocation dans Redis
+        # --------------------------------------------------------------------
 
         except MissingTokenError:
             logger.warning("Tentative de déconnexion sans token JWT")
@@ -167,25 +264,48 @@ class AuthService:
             logger.exception(f"Erreur inattendue lors du logout : {e}")
             raise InternalServerException(detail="Erreur interne lors de la déconnexion")
   
-    async def refresh(self, auth_jwt: AuthJWT) -> TokenResponseSchema:
+    async def refresh(self, auth_jwt: AuthJWT,refresh_token: str) -> TokenResponseSchema:
         """
         Rafraîchit le token d’accès à partir d’un refresh token valide.
-        Vérifie également si le refresh token est révoqué.
+        - Récupère le refresh token depuis le header `X-Refresh-Token`.
+        - Vérifie s’il n’est pas révoqué.
+        - Génère un nouveau access token.
         """
         try:
-            # 🔒 Vérifie la présence du refresh token
-            auth_jwt.jwt_refresh_token_required()
-            raw_refresh = auth_jwt.get_raw_jwt()
-            refresh_jti = raw_refresh.get("jti")
 
-            # Vérifie si le refresh token est déjà révoqué
+            # --------------------------------------------------------------------
+            # 1️⃣ Vérifie la présence du refresh token dans les headers
+            # --------------------------------------------------------------------
+            if not refresh_token:
+                raise UnauthorizedException(detail="Refresh token manquant dans les en-têtes")
+
+            # --------------------------------------------------------------------
+            # 2️⃣ Vérifie et décode le refresh token
+            # --------------------------------------------------------------------
+            try:
+                decoded_refresh = auth_jwt._verified_token(refresh_token)
+            except Exception as e:
+                logger.warning(f"Refresh token invalide ou expiré : {e}")
+                raise UnauthorizedException(detail="Refresh token invalide ou expiré")
+
+            refresh_jti = decoded_refresh.get("jti")
+            refresh_exp = decoded_refresh.get("exp")
+
+            if not refresh_jti or not refresh_exp:
+                raise UnauthorizedException(detail="Refresh token mal formé")
+
+            # --------------------------------------------------------------------
+            # 3️⃣ Vérifie si le refresh token est dans la denylist
+            # --------------------------------------------------------------------
             from core.security import check_if_token_in_denylist
             if check_if_token_in_denylist({"jti": refresh_jti}):
                 logger.warning(f"Refresh token révoqué détecté : jti={refresh_jti}")
                 raise UnauthorizedException(detail="Refresh token révoqué. Veuillez vous reconnecter.")
 
-            # Récupère l’utilisateur
-            current_user_id = auth_jwt.get_jwt_subject()
+            # --------------------------------------------------------------------
+            # 4️⃣ Récupère l’utilisateur depuis le subject du token
+            # --------------------------------------------------------------------
+            current_user_id = decoded_refresh.get("sub")
             if not current_user_id:
                 raise UnauthorizedException(detail="Token invalide ou mal formé")
 
@@ -194,9 +314,15 @@ class AuthService:
             except DoesNotExist:
                 raise UnauthorizedException(detail="Utilisateur introuvable")
 
-            # Génère un nouveau access token
-            new_access_token = auth_jwt.create_access_token(subject=str(user.id))
-            logger.info(f"Token rafraîchi avec succès pour {user.email}")
+            # --------------------------------------------------------------------
+            # 5️⃣ Génère un nouveau access token
+            # --------------------------------------------------------------------
+            new_access_token = auth_jwt.create_access_token(
+                    subject=str(user.id),
+                    user_claims={"usertype": user.user_type.value}  # ajoute le type utilisateur
+                )
+
+            logger.info(f"✅ Token rafraîchi avec succès pour {user.email}")
 
             return TokenResponseSchema(
                 access_token=new_access_token,
@@ -209,10 +335,6 @@ class AuthService:
         except MissingTokenError:
             logger.warning("Tentative de rafraîchissement sans token")
             raise UnauthorizedException(detail="Aucun token fourni")
-
-        except RevokedTokenError:
-            logger.warning("Tentative d’utilisation d’un refresh token révoqué")
-            raise UnauthorizedException(detail="Token révoqué. Veuillez vous reconnecter.")
 
         except JWTDecodeError:
             logger.warning("Échec du décodage du refresh token")

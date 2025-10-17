@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status,Security
 from fastapi_jwt_auth import AuthJWT
+from fastapi.security import HTTPAuthorizationCredentials
 
 from services.auth_service import AuthService
 from schemas.user_schema import (
@@ -14,6 +15,7 @@ from core.exceptions import (
     ConflictException,
     InternalServerException
 )
+from core.dependencies import access_security, refresh_security
 
 from core.logging import logger
 
@@ -73,12 +75,15 @@ async def login(data: LoginDataSchema,Authorize: AuthJWT = Depends()):
 # Logout
 # ------------------------------
 @router.post("/logout", status_code=status.HTTP_200_OK)
-async def logout(Authorize: AuthJWT = Depends()):
+async def logout(Authorize: AuthJWT = Depends(),access: HTTPAuthorizationCredentials = Security(access_security),refresh_token: str = Security(refresh_security)):
     """
-    Révoque le token actuel.
+    Les deux tokens sont passés via les headers :
+    - Authorization: Bearer <access_token>
+    - X-Refresh-Token: <refresh_token>
     """
     try:
-        return await auth_service.logout(Authorize)
+        access_token = access.credentials
+        return await auth_service.logout(Authorize,access_token, refresh_token)
     except Exception as e:
         handle_exception(e)
 
@@ -86,13 +91,13 @@ async def logout(Authorize: AuthJWT = Depends()):
 # ------------------------------
 # Refresh token
 # ------------------------------
-@router.post("/refresh", response_model=TokenResponseSchema, status_code=status.HTTP_200_OK)
-async def refresh(Authorize: AuthJWT = Depends()):
+@router.post("/refresh",dependencies=[Security(refresh_security)], response_model=TokenResponseSchema, status_code=status.HTTP_200_OK)
+async def refresh(Authorize: AuthJWT = Depends(),refresh_token: str = Security(refresh_security)):
     """
     Rafraîchit le token d'accès à l'aide du refresh token.
     """
     try:
-        return await auth_service.refresh(Authorize)
+        return await auth_service.refresh(Authorize,refresh_token)
     except Exception as e:
         handle_exception(e)
 

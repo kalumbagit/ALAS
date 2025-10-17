@@ -82,7 +82,7 @@ class UserService:
                     password_hash=hashed_password,
                     first_name=user_data.first_name,
                     last_name=user_data.last_name,
-                    user_type= UserType.CUSTOMER,
+                    user_type= user_data.user_type if user_data.user_type and user_data.user_type != UserType.ADMIN else UserType.CUSTOMER,
                     avatar_url=user_data.avatar_url
                 )
                 

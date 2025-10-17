@@ -44,3 +44,37 @@ class ConflictException(APIException):
 class InternalServerException(APIException):
     def __init__(self, detail: str = "Erreur interne du serveur"):
         super().__init__(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=detail)
+
+#-----------------------------------------------------------------
+# Exceptions spécifiques aux livreurs
+#-----------------------------------------------------------------
+class DelivererException(HTTPException):
+    """Exception de base pour les livreurs"""
+    def __init__(self, detail: str, status_code: int = status.HTTP_400_BAD_REQUEST):
+        super().__init__(status_code=status_code, detail=detail)
+
+class DelivererNotFoundException(DelivererException):
+    def __init__(self, deliverer_id: str):
+        detail = f"Livreur avec ID {deliverer_id} introuvable"
+        super().__init__(detail=detail, status_code=status.HTTP_404_NOT_FOUND)
+
+class DelivererAlreadyExistsException(DelivererException):
+    def __init__(self, user_id: str):
+        detail = f"L'utilisateur {user_id} est déjà un livreur"
+        super().__init__(detail=detail)
+
+class InvalidReferralCodeException(DelivererException):
+    def __init__(self, referral_code: str):
+        detail = f"Code de parrainage invalide: {referral_code}"
+        super().__init__(detail=detail)
+
+class DelivererSuspendedException(DelivererException):
+    def __init__(self, deliverer_id: str):
+        detail = f"Livreur {deliverer_id} est suspendu"
+        super().__init__(detail=detail)
+
+class DelivererNotActiveException(DelivererException):
+    def __init__(self, deliverer_id: str):
+        detail = f"Livreur {deliverer_id} n'est pas actif"
+        super().__init__(detail=detail)
+
