@@ -16,6 +16,7 @@ from io import BytesIO
 # Config & Logging
 from core.config import settings
 from core.logging import logger
+from core.exceptions import InternalServerException,APIException
 
 # Optionnel pour Boto3 (S3) si tu veux switcher plus tard
 # import boto3
@@ -43,9 +44,17 @@ async def upload_identity_document(file: UploadFile) -> str:
     BUCKET_NAME = settings.MINIO_BUCKET_DELIVERER_IDENTITY
 
     try:
-        # Génère un nom unique
-        file_extension = file.filename.split(".")[-1]
+        # Génère un nom unique et vérifie la présence d'une extension
+        if "." not in file.filename or file.filename.startswith("."):
+            raise APIException(detail="Le fichier doit avoir une extension valide (ex: .jpg, .png, .pdf).")
+
+        file_extension = file.filename.split(".")[-1].lower()
+
+        if not file_extension:
+            raise APIException(detail="Le fichier doit avoir une extension valide (ex: .jpg, .png, .pdf).")
+
         file_name = f"{uuid.uuid4()}.{file_extension}"
+
 
         # Vérifie ou crée le bucket
         if not MINIO_CLIENT.bucket_exists(BUCKET_NAME):
@@ -73,10 +82,7 @@ async def upload_identity_document(file: UploadFile) -> str:
 
     except Exception as e:
         logger.error(f"Erreur lors de l'upload du fichier : {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Erreur lors de l'upload du fichier : {str(e)}"
-        )
+        raise InternalServerException(detail=f"Erreur lors de l'upload du fichier : {str(e)}")
 
 
 # =========================
