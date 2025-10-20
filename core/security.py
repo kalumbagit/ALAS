@@ -25,6 +25,7 @@ def check_if_token_in_denylist(decrypted_token):
     Doit être rapide et non-bloquante.
     """
     jti = decrypted_token.get("jti")
+    print(f"🔍 Token denylist check: jti={jti}")
     if not jti:
         return True  # token invalide => considéré comme révoqué
 
@@ -32,7 +33,9 @@ def check_if_token_in_denylist(decrypted_token):
     try:
         is_revoked = redis_client_sync.exists(jti)  # 1 si existe, 0 sinon
         return is_revoked == 1
-    except Exception:
+    except Exception as e:
+        from core.logging import logger
+        logger.warning(f"❌ Impossible de joindre Redis pour vérifier le token JTI={jti} : {e}")
         # Si Redis est down, on considère le token comme révoqué pour sécurité
         return True
 

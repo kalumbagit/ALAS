@@ -1,5 +1,6 @@
 # Standard library
 from typing import List, Optional
+from pydantic import ValidationError
 
 # Third-party libraries
 from fastapi import APIRouter, HTTPException, Query, status,Depends
@@ -70,6 +71,11 @@ def handle_exception(e: Exception):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erreur interne du serveur"
+        )
+    elif isinstance(e, ValidationError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=e.errors()
         )
     else:
         logger.exception(f"Erreur inattendue non gérée : {e}")

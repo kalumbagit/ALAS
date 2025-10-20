@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY:str
     MINIO_SECURE:bool
     MINIO_BUCKET_DELIVERER_IDENTITY:str
+    MINIO_BUCKET_MERCHANT_DOCS:str
+    MINIO_BUCKET_USER_AVATARS:str
 
     @validator("DB_URL", pre=True, always=True)
     def build_db_url(cls, v, values):

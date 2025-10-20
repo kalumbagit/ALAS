@@ -8,6 +8,7 @@ from tortoise.models import Model
 from tortoise import fields
 from core.enums import (
     UserType, 
+    SubscriptionPlanType,
     BusinessType,
     VehicleType,
     IdentityType,
@@ -82,6 +83,17 @@ class Merchant(Model):
     logo_url = fields.CharField(max_length=255, null=True)
     banner_url = fields.CharField(max_length=255, null=True)
     siret = fields.CharField(max_length=50, unique=True)
+    
+    # ⚡ Nouveaux champs liés à la monétisation
+    subscription_plan = fields.ForeignKeyField(
+        "models.SubscriptionPlan",
+        related_name="merchants",
+        null=True
+    )
+    commission_balance = fields.FloatField(default=0.0, description="Total des commissions dues/non payées")
+    last_payment_date = fields.DatetimeField(null=True)
+
+    # ⚙️ Infos opérationnelles
     is_approved = fields.BooleanField(default=False)
     is_verified = fields.BooleanField(default=False)
     rating = fields.FloatField(default=0.0)
@@ -89,11 +101,46 @@ class Merchant(Model):
     is_active = fields.BooleanField(default=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
+    verified_by = fields.CharField(max_length=100, null=True)
+    verification_date = fields.DatetimeField(null=True)
+    
     user = fields.ForeignKeyField("models.User", related_name="merchant", unique=True)
 
     def __str__(self):
         return f"{self.business_name} ({self.business_type})"
+    
+    def give_rating(self, new_rating: float):
+        total_score = self.rating * self.total_ratings
+        total_score += new_rating
+        self.total_ratings += 1
+        self.rating = total_score / self.total_ratings
 
+    def remove_rating(self, removed_rating: float):
+        if self.total_ratings <= 1:
+            self.rating = 0.0
+            self.total_ratings = 0
+            return
+        total_score = self.rating * self.total_ratings
+        total_score -= removed_rating
+        self.total_ratings -= 1
+        self.rating = total_score / self.total_ratings
+
+    # -----------------------
+    # 🧾 Vérification identité
+    # -----------------------
+    async def verify_identity(self, admin_identifier: str):
+        """
+        Valide manuellement l’identité du marchant après évaluation humaine.
+        """
+        if not self.banner_url:
+            raise ValueError("Piece d'identification non fourni.")
+        
+        self.is_verified = True
+        self.is_approved = True
+        self.verified_by = admin_identifier
+        self.verification_date = datetime.now(timezone.utc)
+        await self.save()
+        return {"identity_verified": True}
 # ==============================
 # 🚴‍♂️ Détails du livreur
 # ==============================
@@ -321,3 +368,67 @@ class DelivererWithdrawal(Model):
 
     def __str__(self):
         return f"Retrait {self.reference} - {self.amount} ({self.status})"
+
+# ==============================
+# 📦 Plan d'abonnement marchand
+# ==============================
+class SubscriptionPlan(Model):
+    """
+    Modèle représentant un plan d'abonnement disponible pour les marchands.
+
+    ⚙️ Ce modèle est lié à l'enum SubscriptionPlanType :
+    - Chaque plan possède un code unique (ex: 'free', 'basic', 'pro', 'premium')
+    - Le backend peut automatiquement synchroniser les valeurs de l'enum dans cette table
+      via un script de "seeding" au démarrage.
+    """
+
+    id = fields.UUIDField(pk=True)
+
+    # Code unique correspondant au type d’abonnement (doit venir de SubscriptionPlanType)
+    code = fields.CharField(max_length=50, unique=True, description="Code interne du plan (ex: free, basic, pro...)")
+
+    # Nom du plan (affichage utilisateur, ex: 'Basique', 'Premium')
+    name = fields.CharField(max_length=100, description="Nom lisible du plan")
+
+    # Description libre pour expliquer les avantages du plan
+    description = fields.TextField(null=True, description="Description du plan d’abonnement")
+
+    # Pourcentage de commission prélevé sur chaque vente
+    commission_rate = fields.FloatField(default=0.0, description="Pourcentage prélevé sur chaque transaction")
+
+    # Coût mensuel fixe du plan
+    monthly_fee = fields.FloatField(default=0.0, description="Frais mensuels fixes pour ce plan")
+
+    # Indique si le plan est actif et disponible à la sélection
+    is_active = fields.BooleanField(default=True, description="Définit si le plan est actuellement actif")
+
+    # Métadonnées temporelles
+    created_at = fields.DatetimeField(auto_now_add=True)
+    updated_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        table = "subscription_plans"
+        ordering = ["monthly_fee"]
+
+    def __str__(self):
+        """
+        Retourne une représentation lisible du plan (utile dans les logs et l’admin).
+        """
+        return f"{self.name} ({self.monthly_fee} FCFA/mois, {self.commission_rate*100:.1f}% commission)"
+
+    @classmethod
+    async def seed_from_enum(cls):
+        """
+        Synchronise automatiquement la table avec les valeurs de l'enum SubscriptionPlanType.
+        (à appeler au démarrage de l'application si nécessaire)
+        """
+        for plan_type in SubscriptionPlanType:
+            existing = await cls.get_or_none(code=plan_type.value)
+            if not existing:
+                await cls.create(
+                    code=plan_type.value,
+                    name=plan_type.label,
+                    commission_rate=plan_type.commission_rate,
+                    monthly_fee=plan_type.monthly_fee,
+                    description=f"Plan {plan_type.label} – {plan_type.commission_rate*100:.0f}% de commission.",
+                )

@@ -5,6 +5,8 @@
 # MinIO SDK
 from minio import Minio
 
+from typing import Optional
+
 # FastAPI
 from fastapi import UploadFile, HTTPException, status
 
@@ -37,11 +39,18 @@ MINIO_CLIENT = Minio(
 # Fonction d'upload
 # =========================
 
-async def upload_identity_document(file: UploadFile) -> str:
+async def upload_identity_document(file: UploadFile,bucket_name: Optional[str] = None) -> str:
     """
     Upload un document d'identité vers MinIO et retourne l'URL publique.
+    
+    Args:
+        file (UploadFile): le fichier à uploader
+        bucket_name (Optional[str]): nom du bucket MinIO à utiliser (optionnel)
+    
+    Returns:
+        str: URL publique du fichier uploadé
     """
-    BUCKET_NAME = settings.MINIO_BUCKET_DELIVERER_IDENTITY
+    BUCKET_NAME =  bucket_name or settings.MINIO_BUCKET_DELIVERER_IDENTITY
 
     try:
         # Génère un nom unique et vérifie la présence d'une extension

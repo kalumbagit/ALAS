@@ -362,12 +362,6 @@ class AuthService:
                 logger.warning("Token JWT incomplet ou mal formé détecté lors de get_current_user()")
                 raise UnauthorizedException(detail="Token invalide ou incomplet")
 
-            # Vérification via Redis
-            from core.redis import is_token_revoked
-            if await is_token_revoked(jti):
-                logger.warning(f"Tentative d’accès avec un token révoqué : jti={jti}")
-                raise UnauthorizedException(detail="Token révoqué. Veuillez vous reconnecter.")
-
             # 🧩 Récupération de l’utilisateur en base
             try:
                 user = await User.get(id=user_id)
@@ -393,8 +387,8 @@ class AuthService:
             raise UnauthorizedException(detail="Token non fourni")
 
         except RevokedTokenError as e :
-            logger.warning(f"Tentative d’accès avec un token révoqué : plus de details {e} ")
-            raise UnauthorizedException(detail=f"Token révoqué. Veuillez vous reconnecter. plus de details {e}")
+            logger.warning(f"Tentative d’accès avec un token révoqué : plus de details {e.message} ")
+            raise UnauthorizedException(detail=f"Token révoqué. Veuillez vous reconnecter. plus de details {e.message} ")
 
         except JWTDecodeError:
             logger.error("Erreur de décodage du token JWT lors de get_current_user()")

@@ -6,14 +6,14 @@ from services.file_service import upload_identity_document
 from schemas.deliverer_schema import (
     DelivererCreateSchema,
     DelivererUpdateSchema,
-    UserOutSchema,
     DelivererDetailsOutputSchema,
     DelivererStatusUpdateSchema,
     DelivererReferralHistorySchema,
     DelivererSuspensionActiveSchema,
     DelivererSuspensionDesactivateSchema,
     DelivererEarningsSchema,
-    DelivererEarningsCreateEventSchema
+    DelivererEarningsCreateEventSchema,
+    DelivererSuccesRequestSchema
 
 )
 from services.deliverer_service import DelivererService
@@ -33,7 +33,7 @@ admin_router = APIRouter(prefix="/admin/manage/deliverers", tags=["Deliverers - 
 # 🔹 ROUTES UTILISATEURS (ACCES LIVREUR)
 # ====================================================
 
-@router.post("/", response_model=UserOutSchema, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=DelivererSuccesRequestSchema, status_code=status.HTTP_201_CREATED)
 async def create_deliverer(
     deliverer: str = Form(..., description="Données JSON du livreur"),
     identity_document: UploadFile = File(..., description="Fichier de la pièce d'identité"),
@@ -73,7 +73,7 @@ async def get_deliverer(user_id: str, user: None = Depends(require_access_token)
     except Exception as e:
         handle_exception(e)
 
-@router.patch("/{user_id}", response_model=DelivererDetailsOutputSchema)
+@router.patch("/{user_id}", response_model=DelivererSuccesRequestSchema)
 async def update_deliverer(user_id: str, data: DelivererUpdateSchema, user: None = Depends(require_access_token)):
     """Mise à jour partielle du profil livreur."""
     try:
@@ -108,12 +108,12 @@ async def list_deliverers(limit: int = 50, offset: int = 0, admin: None = Depend
     except Exception as e:
         handle_exception(e)
 
-@admin_router.delete("/{user_id}", status_code=status.HTTP_200_OK)
+@admin_router.delete("/{user_id}",response_model=DelivererSuccesRequestSchema, status_code=status.HTTP_200_OK)
 async def delete_deliverer(user_id: str, admin: None = Depends(require_admin)):
     """Supprime un livreur du système (action irréversible)."""
     try:
         await deliverer_service.delete_deliverer(user_id)
-        return {"detail": "Livreur supprimé avec succès"}
+        return DelivererSuccesRequestSchema(detail="Livreur supprimé avec succès")
     except Exception as e:
         handle_exception(e)
 

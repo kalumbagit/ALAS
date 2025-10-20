@@ -47,7 +47,6 @@ class DelivererUpdateSchema(BaseModel):
 
     vehicle_type: Optional[VehicleType] = Field(None, description="Type de véhicule du livreur")
     identity_code: Optional[str] = Field(None, description="Numéro de la pièce d'identité")
-    general: Optional[UserUpdateSchema] = Field(None, description="Informations utilisateur associées")
 
 class DelivererDetailsOutputSchema(BaseModel):
     """

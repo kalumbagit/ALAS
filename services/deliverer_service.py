@@ -24,7 +24,8 @@ from schemas.deliverer_schema import (
     DelivererReferralHistorySchema,
     DelivererEarningsSchema,
     DelivererEarningsCreateEventSchema,
-    DelivererEarningsStatusChangeSchema
+    DelivererEarningsStatusChangeSchema,
+    DelivererUpdateSchema
 
     )
 
@@ -54,7 +55,7 @@ class DelivererService:
     async def create_deliverer(
         self,
         delivererInput: DelivererCreateSchema
-    ) -> UserOutSchema:
+    ) -> DelivererSuccesRequestSchema:
         try:
             # Vérifie si l'utilisateur existe déjà
             user= await self.user_service.create_user(delivererInput.user_data)
@@ -82,7 +83,7 @@ class DelivererService:
                                f"Le livreur a été créé sans parrain.")
 
             logger.info(f"Livreur créé avec succès : {deliverer.id}")
-            return user
+            return DelivererSuccesRequestSchema(detail="livreur creé avec succes")
 
         except DoesNotExist:
             raise NotFoundException(detail="Sponsor introuvable")
@@ -175,7 +176,7 @@ class DelivererService:
     # ------------------------------
     # Mise à jour partielle
     # ------------------------------
-    async def update_deliverer(self, user_id: str, data: dict) -> DelivererDetailsOutputSchema:
+    async def update_deliverer(self, user_id: str, data: DelivererUpdateSchema) -> DelivererSuccesRequestSchema:
         """
         Met à jour partiellement les informations d’un livreur et retourne
         un schéma complet mis à jour.
@@ -185,32 +186,18 @@ class DelivererService:
             deliverer = await DelivererDetails.get(user=user_id).prefetch_related("user")
 
             # --- 🔸 Mise à jour des infos DelivererDetails ---
-            for key, value in data.items():
-                if key != "general" and hasattr(deliverer, key):
+            update_data = data.dict(exclude_unset=True)
+            for key, value in update_data.items():
+                if hasattr(deliverer, key):
                     setattr(deliverer, key, value)
 
-            # --- 🔸 Mise à jour des infos du User associé ---
-            general_data = data.get("general")
-            if general_data:
-                for key, value in general_data.items():
-                    if hasattr(deliverer.user, key):
-                        setattr(deliverer.user, key, value)
-                await deliverer.user.save()
-
-            deliverer.updated_at = datetime.now(timezone.utc)
+            
             await deliverer.save()
 
             # 🔹 Conversion ORM → Schéma
             user_data = UserOutSchema.from_orm(deliverer.user)
 
-            return DelivererDetailsOutputSchema(
-                user_data=user_data,
-                vehicle_type=deliverer.vehicle_type,
-                total_earnings=deliverer.total_earnings,
-                referral_earnings=deliverer.referral_earnings,
-                completed_deliveries=deliverer.completed_deliveries,
-                total_referals= await deliverer.get_referral_count()
-            )
+            return DelivererSuccesRequestSchema(detail="livreur mis à jour avec succès")
 
         except DoesNotExist:
             raise NotFoundException(detail="Livreur introuvable")
