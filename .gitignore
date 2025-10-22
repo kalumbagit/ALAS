@@ -1,0 +1,14 @@
+__pycache__
+.env
+pyproject.toml
+controllers/__pycache__
+core/__pycache__
+events/__pycache__
+logs
+middlewares/__pycache__
+migrations
+models/__pycache__
+schemas/__pycache__
+services/__pycache__
+tests/__pycache__
+utils/__pycache__

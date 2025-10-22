@@ -1,0 +1,196 @@
+
+
+# ALAS2 – Service Gestion des Produits
+
+**Nom du projet :** ALAS2
+**Dépôt parent :** ALAS (Application Livraison All Service)
+**Service :** Gestion des produits
+
+---
+
+## 1. Description
+
+ALAS2 est le **service central de gestion des produits** pour l’application de livraison. Il gère toutes les fonctionnalités liées aux catalogues et produits des marchands :
+
+* Création, modification et suppression de produits
+* Gestion des catalogues par marchand
+* Gestion des catégories et attributs produits
+* Contrôle de disponibilité et stock
+* Validation des données produits avec Pydantic schemas
+* Support pour l’activation/désactivation et suivi des mises à jour
+
+Ce service constitue la **base produit** sur laquelle tous les autres services interconnectés d’ALAS vont s’appuyer.
+
+---
+
+## 2. Architecture du projet
+
+```
+app/
+│
+├── controllers/      # Endpoints et routes API
+├── core/             # Configuration, DB, sécurité, exceptions
+├── events/           # Événements et listeners inter-services (Kafka, etc.)
+├── middlewares/      # Middlewares (auth, logging, validation)
+├── models/           # Modèles Tortoise ORM pour les produits
+├── schemas/          # Pydantic schemas pour validation et sérialisation
+├── services/         # Logique métier réutilisable
+├── utils/            # Fonctions utilitaires
+├── tests/            # Tests unitaires et d’intégration
+├── main.py           # Point d’entrée FastAPI
+├── requirements.txt  # Dépendances Python
+└── README.md         # Ce fichier
+```
+
+---
+
+## 3. Dépendances principales
+
+| Librairie            | Rôle                                    |
+| -------------------- | --------------------------------------- |
+| **FastAPI**          | Framework web pour créer les API REST   |
+| **Uvicorn**          | Serveur ASGI pour lancer l’application  |
+| **Tortoise ORM**     | ORM asynchrone pour PostgreSQL          |
+| **asyncpg**          | Driver PostgreSQL asynchrone            |
+| **python-dotenv**    | Gestion des variables d’environnement   |
+| **pydantic**         | Validation et sérialisation des données |
+
+
+*(Voir `requirements.txt` pour la liste complète)*
+
+---
+
+## 4. Configuration Pydantic v2
+
+Le projet utilise **Pydantic v2** avec `pydantic-settings` pour la gestion centralisée des settings :
+
+* `BaseSettings` chargé depuis le package `pydantic-settings`
+* Validators adaptés avec `@field_validator` pour Pydantic v2
+* Toutes les variables critiques (DB, Redis, JWT, etc.) sont définies avec des valeurs par défaut ou chargées depuis `.env`
+* Assure la compatibilité avec `aerich` et Tortoise ORM
+
+---
+
+## 5. Installation et lancement
+
+1. **Créer un environnement virtuel**
+
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+2. **Installer les dépendances**
+
+```bash
+pip install -r requirements.txt
+```
+
+3. **Lancer le service**
+
+```bash
+python main.py
+```
+
+4. **Accéder à la documentation interactive**
+
+* Swagger UI : [http://localhost:8001/docs](http://localhost:8001/docs)
+* ReDoc : [http://localhost:8001/redoc](http://localhost:8001/redoc)
+
+---
+
+## 6. Migrations avec Aerich
+
+1. **Initialiser Aerich** (une seule fois)
+
+```bash
+aerich init -t core.database.TORTOISE_ORM
+```
+
+2. **Créer la première migration**
+
+```bash
+aerich init-db
+```
+
+3. **Créer de nouvelles migrations après modification des modèles**
+
+```bash
+aerich migrate --name "add_product_category_table"
+```
+
+4. **Appliquer les migrations**
+
+```bash
+aerich upgrade
+```
+
+5. **Revenir en arrière (optionnel)**
+
+```bash
+aerich downgrade
+```
+
+---
+
+## 7. Tests
+
+* Tous les tests :
+
+```bash
+pytest
+```
+
+* Tests avec couverture :
+
+```bash
+pytest --cov=services --cov-report=html
+```
+
+* Tests spécifiques :
+
+```bash
+pytest tests/test_product_service.py -v
+```
+
+* Tests d’intégration seulement :
+
+```bash
+pytest -m integration
+```
+
+* Exclure les tests lents :
+
+```bash
+pytest -m "not slow"
+```
+
+---
+
+## 8. Branches Git
+
+* Branche principale : `main`
+* Branche de développement du service produit : `ALAS2`
+
+```bash
+git switch -c ALAS2
+```
+
+---
+
+## 9. Contribution
+
+* Chaque modification doit être effectuée sur **une branche dédiée** basée sur `ALAS2`
+* Respecter la structure de dossiers et les conventions de code Python / FastAPI
+* Ajouter des tests pour chaque nouvelle fonctionnalité
+
+---
+
+## 10. Liens utiles
+
+* [FastAPI Documentation](https://fastapi.tiangolo.com/fr/)
+* [Tortoise ORM](https://tortoise.github.io/)
+* [FastAPI JWT Auth](https://pypi.org/project/fastapi-jwt-auth/)
+
+---
+
