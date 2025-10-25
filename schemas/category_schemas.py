@@ -45,8 +45,7 @@ class CategorySimpleOut(CategoryBase):
     id: UUID
     merchant_id: Optional[UUID]
     is_active: bool
-    created_at: str  # ou datetime si tu préfères
-    products_count: Optional[int] = Field(0, description="Nombre de produits actifs")  # Nouveau
+    
     
     model_config = {
         "from_attributes": True,

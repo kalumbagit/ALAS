@@ -10,7 +10,7 @@ from core.redis import RedisService
 import time
 
 # Cache pour les tokens vérifiés (optionnel, pour la performance)
-client=RedisService(db_index=settings.REDIS_DB_TOKEN_CACHE)
+
 class AuthMiddleware(HTTPBearer):
     """
     Middleware d'authentification professionnel avec gestion avancée des tokens
@@ -21,6 +21,7 @@ class AuthMiddleware(HTTPBearer):
         self.jwt_secret = settings.JWT_SECRET
         self.jwt_algorithm = settings.JWT_ALGORITHM
         self.allowed_user_types = {"merchant", "admin", "super_admin"}  # Configurable
+        self.client=RedisService(db_index=settings.REDIS_DB_TOKEN_CACHE)
 
     async def __call__(self, request: Request) -> Optional[Dict[str, Any]]:
         """
@@ -44,7 +45,7 @@ class AuthMiddleware(HTTPBearer):
         Vérifie et décode le token JWT
         """
         # 1️⃣ Vérification du cache (si déjà validé récemment)
-        cached_payload = await client.get_data(token)
+        cached_payload = await self.client.get_data(token)
         if cached_payload:
             self._inject_user_data(request, cached_payload)
             return cached_payload
@@ -77,7 +78,7 @@ class AuthMiddleware(HTTPBearer):
             ttl = max(exp_timestamp - current_time, 0)  # éviter les valeurs négatives
 
             # Stockage du payload sous forme de string JSON
-            await client.set_data(key=token, value=payload, ttl=ttl)
+            await self.client.set_data(key=token, value=payload, ttl=ttl)
             
             logger.info(f"Authentification réussie pour l'utilisateur {payload.get('user_id')}")
             return payload
@@ -105,19 +106,28 @@ class AuthMiddleware(HTTPBearer):
         """
         Valide la présence des claims requis dans le payload
         """
-        required_claims = {"user_id", "user_type", "exp"}
-        missing_claims = required_claims - set(payload.keys())
+
+        required_claims = {"sub", "user_type", "exp"}
+        available_claims = set(payload.keys())
+
+        # Inclure les clés imbriquées dans subject
+        if "subject" in payload and isinstance(payload["subject"], dict):
+            available_claims |= set(payload["subject"].keys())
+        
+        missing_claims = required_claims - available_claims
         
         if missing_claims:
             raise JWTError(f"Claims manquants dans le token: {missing_claims}")
 
-        # Validation du format de l'user_id
-        user_id = payload.get("user_id")
+        subject = payload.get("subject", {})
+        user_id = subject.get("sub")
+        user_type = subject.get("user_type")
+
         if not user_id or not isinstance(user_id, (str, int)):
             raise JWTError("user_id invalide dans le token")
 
         # Validation du type d'utilisateur
-        user_type = payload.get("user_type")
+        user_type = subject.get("user_type")
         if not user_type or not isinstance(user_type, str):
             raise JWTError("user_type invalide dans le token")
 
@@ -125,7 +135,8 @@ class AuthMiddleware(HTTPBearer):
         """
         Vérifie les permissions de l'utilisateur
         """
-        user_type = payload.get("user_type")
+        subject = payload.get("subject", {})
+        user_type = subject.get("user_type")
         
         if user_type not in self.allowed_user_types:
             raise PermissionError(
@@ -135,9 +146,10 @@ class AuthMiddleware(HTTPBearer):
 
         # Vérification supplémentaire pour les marchands avec abonnement expiré
         if user_type == "merchant":
-            subscription_status = payload.get("subscription_status")
-            if subscription_status == "expired":
-                logger.warning(f"Marchand {payload.get('user_id')} avec abonnement expiré")
+            pass
+            #subscription_status = payload.get("subscription_status")
+            #if subscription_status == "expired":
+                #logger.warning(f"Marchand {payload.get('user_id')} avec abonnement expiré")
                 # Option: autoriser quand même ou bloquer?
                 # raise PermissionError("Abonnement expiré")
 
@@ -145,21 +157,23 @@ class AuthMiddleware(HTTPBearer):
         """
         Injecte les données utilisateur dans l'objet request
         """
+        subject = payload.get("subject", {})
+
         request.state.user_data = {
-            "user_id": payload.get("user_id"),
-            "user_type": payload.get("user_type"),
-            "subscription_type": payload.get("subscription_type", "free"),
-            "subscription_status": payload.get("subscription_status", "active"),
-            "permissions": payload.get("permissions", []),
+            "user_id": subject.get("sub"),
+            "user_type": subject.get("user_type"),
+            "subscription_type": subject.get("subscription_type", "free"),
+            #"subscription_status": subject.get("subscription_status", "active"),
+            #"permissions": subject.get("permissions", []),
             #"merchant_id": payload.get("merchant_id"),  # Si l'utilisateur gère un marchand spécifique
-            "email": payload.get("email")
+            #"email": payload.get("email")
         }
 
 # Instances réutilisables
 auth_middleware = AuthMiddleware()
 
 # Dépendances FastAPI spécifiques
-async def get_current_merchant_or_admin(
+async def get_current_user(
     request: Request, 
     auth: Dict[str, Any] = Depends(auth_middleware)
 ) -> Dict[str, Any]:
@@ -197,17 +211,3 @@ async def get_current_merchant(
             detail="Accès réservé aux marchands"
         )
     return user_data
-
-# Utilitaires pour les contrôleurs
-def get_current_user_id(request: Request) -> str:
-    """Récupère l'ID de l'utilisateur depuis la requête"""
-    return getattr(request.state.user_data, "user_id", None)
-
-def get_current_user_type(request: Request) -> str:
-    """Récupère le type d'utilisateur depuis la requête"""
-    return getattr(request.state.user_data, "user_type", None)
-
-def get_current_merchant_id(request: Request) -> Optional[str]:
-    """Récupère l'ID du marchand depuis la requête"""
-    return getattr(request.state.user_data, "merchant_id", None)
-

@@ -15,12 +15,14 @@ from services.product_service import ProductService
 # Import des utilitaires depuis le contrôleur catégorie
 from .category_controller import (
     handle_exception,
+    get_user_id_or_raise,
+    get_current_user,
+    get_user_type_or_raise,
     get_pagination_params,
     get_category_id,
     _validate_admin_access
 )
 from core.dependencies import (
-    get_current_user,
     validate_merchant_access,
     get_product_query_params,
     get_product_id
@@ -37,16 +39,21 @@ router = APIRouter(prefix="/products", tags=["products"])
 @router.post("", response_model=ResponseSchema, status_code=201)
 async def create_product(
     payload: ProductCreate,
-    current_user: UUID = Depends(get_current_user),
+    current_user = Depends(get_current_user),
     return_data: bool = Query(False, description="Inclure les données créées dans la réponse")
 ):
     """
     Crée un nouveau produit
     """
-    try:
+    try:    
+        user_type=get_user_type_or_raise(current_user)
+        if user_type =="merchant":
+            merchant_id_user=get_user_id_or_raise(current_user)
+        else:
+            merchant_id_user =None
 
         return await ProductService.create_product(
-            user_id=current_user,
+            user_id=merchant_id_user,
             payload=payload,
             return_data=return_data
         )

@@ -15,7 +15,6 @@ from schemas.filter_schemas import (
 )
 from services.category_service import CategoryService
 from core.dependencies import (
-    get_current_user,
     get_pagination_params,
     validate_merchant_access,
     get_category_query_params,
@@ -25,15 +24,15 @@ from core.exceptions import (
     NotFoundException,
     ConflictException,
     InternalServerException,
-    BadRequestException,
     UnauthorizedException,
     APIException
 )
+from middlewares.auth_middleware import get_current_user,get_current_admin,get_current_merchant
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
 # ============================
-# 🔹 DECORATEURS PERSONNALISÉES
+# 🔹 UTILITAIRES 
 # ============================
 def handle_exception(e: Exception):
     """Transforme les exceptions métier en HTTPException pour FastAPI."""
@@ -74,6 +73,27 @@ def handle_exception(e: Exception):
             detail="Une erreur inattendue s'est produite."
         )
 
+def get_user_id_or_raise(user):
+    if isinstance(user, dict):
+        user_id = user.get("user_id")
+    else:
+        user_id = getattr(user, "user_id", None)
+
+    if user_id is None:
+        raise UnauthorizedException(detail="Utilisateur inconnu")
+    return user_id
+
+def get_user_type_or_raise(user):
+    if isinstance(user, dict):
+        user_type = user.get("user_type")
+    else:
+        user_type = getattr(user, "user_type", None)
+    
+    if not user_type:
+        raise UnauthorizedException(detail="Utilisateur inconnu")
+    
+    return user_type
+
 # ============================
 # 🔹 ROUTES CRUD BASIQUES
 # ============================
@@ -81,16 +101,17 @@ def handle_exception(e: Exception):
 @router.post("", response_model=ResponseSchema, status_code=201)
 async def create_category(
     payload: CategoryCreate,
-    current_user: UUID = Depends(get_current_user),
+    current_user = Depends(get_current_user),
     return_data: bool = Query(False, description="Inclure les données créées dans la réponse")
 ):
     """
     Crée une nouvelle catégorie
     """
     try:
+        user_id = get_user_id_or_raise(current_user)
+        payload.merchant_id=user_id
         return await CategoryService.create_category(
             payload=payload,
-            created_by=current_user,
             return_data=return_data
         )
     except Exception as e:
@@ -98,7 +119,8 @@ async def create_category(
 
 @router.get("/{category_id}", response_model=ResponseSchema)
 async def get_category(
-    category_id: UUID = Depends(get_category_id),
+    category_id: UUID,
+    current_user = Depends(get_current_user),
     include_children: bool = Query(False, description="Inclure les sous-catégories")
 ):
     """
@@ -116,13 +138,17 @@ async def get_category(
 @router.get("", response_model=ResponseSchema)
 async def list_categories(
     query_params: CategoryQuerySchema = Depends(get_category_query_params),
-    current_user: UUID = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """
     Liste les catégories avec pagination et filtres avancés
     """
     # Application des filtres spécifiques au marchand si nécessaire
-    merchant_id = await validate_merchant_access(current_user)
+    user_type=get_user_type_or_raise(current_user)
+    if user_type =="merchant":
+        merchant_id=get_user_id_or_raise(current_user)
+    else:
+        merchant_id =None
     try:
         
         return await CategoryService.list_categories(
@@ -139,18 +165,23 @@ async def list_categories(
 async def update_category(
     payload: CategoryUpdate,
     category_id: UUID = Depends(get_category_id),
-    current_user: UUID = Depends(get_current_user),
+    current_user = Depends(get_current_user),
     return_data: bool = Query(False, description="Inclure les données mises à jour dans la réponse")
 ):
     """
     Met à jour une catégorie
     """
     try:
+        user_type=get_user_type_or_raise(current_user)
+        if user_type =="merchant":
+            merchant_id=get_user_id_or_raise(current_user)
+        else:
+            merchant_id =None
         
         return await CategoryService.update_category(
             category_id=category_id,
             payload=payload,
-            updated_by=current_user,
+            updated_by=merchant_id,
             return_data=return_data
         )
     except Exception as e:
@@ -160,7 +191,7 @@ async def update_category(
 async def delete_category(
     category_id: UUID = Depends(get_category_id),
     force: bool = Query(False, description="Forcer la suppression malgré les dépendances"),
-    current_user: UUID = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """
     Supprime une catégorie (soft delete)
@@ -182,15 +213,22 @@ async def delete_category(
 async def get_category_with_products(
     category_id: UUID = Depends(get_category_id),
     include_inactive: bool = Query(False, description="Inclure les produits inactifs"),
-    pagination: PaginationSchema = Depends(get_pagination_params)
+    pagination: PaginationSchema = Depends(get_pagination_params),
+    current_user = Depends(get_current_user)
 ):
     """
     Récupère une catégorie avec ses produits paginés
     """
     try:
+        # Application des filtres spécifiques au marchand si nécessaire
+        user_type=get_user_type_or_raise(current_user)
+        if user_type =="merchant":
+            merchant_id=get_user_id_or_raise(current_user)
+        else:
+            merchant_id =None
         
-        return await CategoryService.get_category_with_products(
-            category_id=category_id,
+        return await CategoryService.list_categories_with_products(
+            merchant_id=merchant_id,
             include_inactive_products=include_inactive,
             pagination=pagination
         )
@@ -199,9 +237,8 @@ async def get_category_with_products(
 
 @router.get("/tree/hierarchy", response_model=ResponseSchema)
 async def get_category_tree(
-    merchant_id: Optional[UUID] = Query(None, description="ID du marchand pour l'arborescence"),
     include_global: bool = Query(True, description="Inclure les catégories globales"),
-    current_user: UUID = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """
     Récupère l'arborescence complète des catégories
@@ -209,8 +246,12 @@ async def get_category_tree(
     try:
         
         # Si merchant_id n'est pas fourni, utiliser celui de l'utilisateur connecté
-        if merchant_id is None:
-            merchant_id = await validate_merchant_access(current_user)
+        # Application des filtres spécifiques au marchand si nécessaire
+        user_type=get_user_type_or_raise(current_user)
+        if user_type =="merchant":
+            merchant_id=get_user_id_or_raise(current_user)
+        else:
+            merchant_id =None
         
         return await CategoryService.get_category_tree(
             merchant_id=merchant_id,

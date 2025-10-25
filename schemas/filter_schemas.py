@@ -89,6 +89,7 @@ class PaginatedResponse( Generic[T]):
         """Factory method pour créer une réponse paginée"""
         total_pages = (total + pagination.page_size - 1) // pagination.page_size
         
+        
         pagination_info = {
             "page": pagination.page,
             "page_size": pagination.page_size,

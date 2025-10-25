@@ -1,4 +1,4 @@
-import time
+import time,json
 import aioredis
 import redis as redis_sync
 from typing import Any, Optional
@@ -46,6 +46,9 @@ class RedisService:
         Enregistre une donnée dans Redis avec TTL optionnel (asynchrone)
         """
         try:
+            # ✅ Si value est un dict, on le convertit en JSON
+            if isinstance(value, (dict, list)):
+                value = json.dumps(value)
             await self._async_client.set(key, value, ex=ttl)
         except Exception as e:
             logger.warning(f"Erreur Redis SET {key}: {e}")
@@ -56,7 +59,13 @@ class RedisService:
         Récupère une donnée dans Redis (asynchrone)
         """
         try:
-            return await self._async_client.get(key)
+            data= await self._async_client.get(key)
+            if data:
+                try:
+                    return json.loads(data)
+                except json.JSONDecodeError:
+                    return data
+            return None
         except Exception as e:
             logger.warning(f"Erreur Redis GET {key}: {e}")
             return None
@@ -79,6 +88,9 @@ class RedisService:
         Version synchrone de set_data()
         """
         try:
+            # ✅ Si value est un dict, on le convertit en JSON
+            if isinstance(value, (dict, list)):
+                value = json.dumps(value)
             self._sync_client.set(key, value, ex=ttl)
         except Exception as e:
             logger.warning(f"Erreur Redis SET {key}: {e}")
@@ -89,7 +101,13 @@ class RedisService:
         Version synchrone de get_data()
         """
         try:
-            return self._sync_client.get(key)
+            data= self._sync_client.get(key)
+            if data:
+                try:
+                    return json.loads(data)
+                except json.JSONDecodeError:
+                    return data
+            return None
         except Exception as e:
             logger.warning(f"Erreur Redis GET {key}: {e}")
             return None

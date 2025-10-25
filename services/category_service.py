@@ -18,8 +18,7 @@ from schemas.filter_schemas import PaginationSchema, CategoryFilterSchema, Enhan
 from core.exceptions import (
     NotFoundException, 
     ConflictException, 
-    InternalServerException,
-    BadRequestException
+    InternalServerException
 )
 
 
@@ -32,24 +31,30 @@ class CategoryService:
     @staticmethod
     async def create_category(
         payload: CategoryCreate, 
-        created_by: UUID,
         return_data: bool = False
     ) -> ResponseSchema:
         """
-        Crée une nouvelle catégorie avec gestion des conflits et audit
+        Crée une nouvelle catégorie avec validation souple du parent.
+        Si la catégorie parente est invalide, on continue sans elle.
         """
         try:
-            # Validation des données métier
-            if payload.parent_id:
-                await CategoryService._validate_parent_category(payload.parent_id, payload.merchant_id)
 
             category_data = payload.model_dump(exclude_unset=True)
-            category_data["created_by"] = created_by
+
+            # 🔎 Validation souple du parent
+            if payload.parent_id:
+                parent = await CategoryService._validate_parent_category(
+                    payload.parent_id, 
+                    payload.merchant_id
+                )
+                if not parent:
+                    # Supprimer le parent_id invalide pour ne pas bloquer la création
+                    category_data.pop("parent_id", None)
             
             async with in_transaction():
                 category = await Category.create(**category_data)
                 
-                logger.info(f"Catégorie créée: {category.name} (ID: {category.id}) par {created_by}")
+                logger.info(f"Catégorie créée: {category.name} (ID: {category.id}) par {payload.merchant_id}")
 
                 if return_data:
                     category_out = await CategoryService._enrich_category_data(category)
@@ -123,7 +128,7 @@ class CategoryService:
                 query = query.filter(is_active=True)
 
             # Préchargement des relations
-            query = query.prefetch_related("children", "products")
+            query = query.prefetch_related("children", "products","parent")
 
             # Pagination
             if pagination:
@@ -366,59 +371,85 @@ class CategoryService:
             raise InternalServerException(detail="Erreur lors de la construction de l'arborescence.")
 
     @staticmethod
-    async def get_category_with_products(
-        category_id: UUID,
+    async def list_categories_with_products(
+        merchant_id: Optional[UUID] = None,
+        include_global: bool = False,
+        include_inactive_categories: bool = False,
         include_inactive_products: bool = False,
         pagination: Optional[PaginationSchema] = None
     ) -> ResponseSchema:
         """
-        Récupère une catégorie avec ses produits
+        Liste paginée des catégories avec leurs produits
+        (pagination basée sur les catégories, pas sur les produits)
         """
         try:
-            category = await Category.get(id=category_id).prefetch_related("products")
-            
-            # Query des produits
-            products_query = category.products.all()
-            if not include_inactive_products:
-                products_query = products_query.filter(is_active=True)
+            # --- Base query des catégories ---
+            query = Category.all()
 
-            # Pagination
-            if pagination:
-                total_products = await products_query.count()
-                products_query = products_query.offset((pagination.page - 1) * pagination.page_size)
-                products_query = products_query.limit(pagination.page_size)
+            # Filtrage par marchand
+            if merchant_id:
+                if include_global:
+                    query = query.filter(Q(merchant_id=merchant_id) | Q(merchant_id=None))
+                else:
+                    query = query.filter(merchant_id=merchant_id)
             else:
-                total_products = await products_query.count()
+                query = query.filter(merchant_id=None)
 
-            products = await products_query
+            # Filtrage par statut
+            if not include_inactive_categories:
+                query = query.filter(is_active=True)
 
-            # Construction de la réponse
-            category_data = await CategoryService._enrich_category_data(category)
-            products_data = [await CategoryService._serialize_product(product) for product in products]
+            # Préchargement
+            query = query.prefetch_related("children", "products", "parent")
 
-            response_data = {
-                "category": category_data,
-                "products": products_data,
-                "products_count": total_products
-            }
-
+            # Pagination basée sur les catégories
+            total_categories = await query.count()
             if pagination:
-                response_data.update({
-                    "page": pagination.page,
-                    "page_size": pagination.page_size,
-                    "total_pages": (total_products + pagination.page_size - 1) // pagination.page_size
-                })
+                offset = (pagination.page - 1) * pagination.page_size
+                query = query.offset(offset).limit(pagination.page_size)
+
+            categories = await query
+
+            # --- Construction des données enrichies ---
+            categories_data = []
+            for category in categories:
+                category_data = await CategoryService._enrich_category_data(category)
+
+                # Filtrage des produits
+                products_query = category.products.all()
+                if not include_inactive_products:
+                    products_query = products_query.filter(is_active=True)
+
+                products = await products_query
+                products_data = [await CategoryService._serialize_product(p) for p in products]
+
+                category_data["products"] = products_data
+                category_data["products_count"] = len(products_data)
+
+                categories_data.append(category_data)
+
+            # --- Calcul des pages ---
+            total_pages = (total_categories + pagination.page_size - 1) // pagination.page_size if pagination else 1
+
+            # --- Réponse finale ---
+            response_data = {
+                "categories": categories_data,
+                "total_categories": total_categories,
+                "page": pagination.page if pagination else 1,
+                "page_size": pagination.page_size if pagination else total_categories,
+                "total_pages": total_pages
+            }
 
             return ResponseSchema(
                 success=True,
-                message="Catégorie avec produits récupérée avec succès.",
+                message="Catégories avec produits récupérées avec succès.",
                 data=response_data
             )
-        except DoesNotExist:
-            raise NotFoundException(detail="Catégorie introuvable.")
+
         except Exception as e:
-            logger.error(f"Erreur récupération catégorie avec produits {category_id}: {e}")
+            logger.error(f"Erreur lors du listing des catégories avec produits: {e}")
             raise InternalServerException(detail="Erreur lors de la récupération des données.")
+
 
     @staticmethod
     async def bulk_update_categories(
@@ -502,39 +533,57 @@ class CategoryService:
     # ============================
 
     @staticmethod
-    async def _validate_parent_category(parent_id: UUID, merchant_id: Optional[UUID], exclude_id: Optional[UUID] = None):
+    async def _validate_parent_category(
+        parent_id: UUID, 
+        merchant_id: Optional[UUID], 
+        exclude_id: Optional[UUID] = None
+    ) -> Optional[Category]:
         """
-        Valide qu'une catégorie parente existe et est compatible
+        Valide qu'une catégorie parente existe et est compatible.
+        Si la catégorie est invalide ou inexistante, on log un warning
+        et retourne None pour indiquer qu'elle doit être ignorée.
         """
         try:
             parent = await Category.get(id=parent_id)
-            
+
             if not parent.is_active:
-                raise BadRequestException(detail="La catégorie parente n'est pas active.")
-            
-            # Vérification de la compatibilité merchant
+                logger.warning(f"Catégorie parente {parent_id} inactive — ignorée.")
+                return None
+
+            # Vérification de compatibilité du marchand
             if parent.merchant_id != merchant_id:
-                raise BadRequestException(
-                    detail="La catégorie parente doit appartenir au même marchand."
+                logger.warning(
+                    f"Incohérence: catégorie parente {parent_id} appartient à un autre marchand. Ignorée."
                 )
-            
-            # Vérification des cycles (la catégorie parente ne doit pas être un descendant)
+                return None
+
+            # Vérification des cycles (la parente ne doit pas être un descendant)
             if exclude_id:
                 current = parent
                 while current.parent_id:
                     if current.parent_id == exclude_id:
-                        raise BadRequestException(detail="Cycle détecté dans la hiérarchie des catégories.")
+                        logger.warning(
+                            f"Cycle détecté entre {exclude_id} et {parent_id}. Catégorie parente ignorée."
+                        )
+                        return None
                     current = await Category.get(id=current.parent_id)
-                    
+
+            return parent
+
         except DoesNotExist:
-            raise NotFoundException(detail="Catégorie parente introuvable.")
+            logger.warning(f"Catégorie parente {parent_id} introuvable — supprimée du payload.")
+            return None
+
+        except Exception as e:
+            logger.warning(f"Erreur inattendue lors de la validation du parent {parent_id}: {e}")
+            return None
 
     @staticmethod
     async def _enrich_category_data(category: Category, include_children: bool = True) -> Dict[str, Any]:
         """
         Enrichit les données d'une catégorie avec des informations calculées
         """
-        category_dict = CategoryOut.from_orm(category).model_dump()
+        category_dict = CategoryOut.model_validate(category).model_dump()
         
         # Compteur de produits actifs
         products_count = await category.products.filter(is_active=True).count()
@@ -551,7 +600,7 @@ class CategoryService:
         
         # Données du parent
         if hasattr(category, 'parent') and category.parent:
-            category_dict["parent"] = CategorySimpleOut.from_orm(category.parent).model_dump()
+            category_dict["parent"] = CategorySimpleOut.model_validate(category.parent).model_dump()
         
         return category_dict
 
