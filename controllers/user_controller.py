@@ -1,3 +1,7 @@
+from fastapi.security import HTTPAuthorizationCredentials
+from core.dependencies import access_security
+from core.security import decode_token
+
 # Standard library
 from typing import List, Optional
 from pydantic import ValidationError
@@ -5,38 +9,21 @@ from pydantic import ValidationError
 # Third-party libraries
 from fastapi import APIRouter, HTTPException, Query, status,Depends
 
-from fastapi_jwt_auth import AuthJWT
 from models.user_model import User,UserType
 
 
 # Local application imports
-from schemas.user_schema import (
-    UserCreateSchema,
-    UserUpdateSchema,
-    UserOutSchema,
-    UserStatusUpdateSchema,
-    UserRatingUpdateSchema,
-    DeleteResponseSchema,
-    UserExistsResponseSchema,
-    UserCountResponseSchema,
-)
+from schemas.user_schema import UserCreateSchema,UserUpdateSchema,UserOutSchema,UserStatusUpdateSchema,UserRatingUpdateSchema,DeleteResponseSchema,UserExistsResponseSchema,UserCountResponseSchema
+
 from services.user_service import UserService
-from core.exceptions import (
-    APIException,
-    NotFoundException,
-    ConflictException,
-    InternalServerException,
-    UnauthorizedException
-)
+from core.exceptions import APIException,NotFoundException,ConflictException,InternalServerException,UnauthorizedException
+
 from core.logging import logger
 
 
 router = APIRouter(prefix="/users", tags=["Users - Customer Management"])
 
-admin_router = APIRouter(
-    prefix="/admin/customer",
-    tags=["Admin - Customer Management"]
-)
+admin_router = APIRouter(prefix="/admin/customer",tags=["Admin - Customer Management"])
 
 user_service = UserService()
 
@@ -84,35 +71,62 @@ def handle_exception(e: Exception):
             detail="Une erreur inattendue s'est produite."
         )
 
-async def require_access_token(auth_jwt: AuthJWT = Depends()):
+# ============================================================
+# 🧩 Vérifie qu’un token d’accès valide est présent
+# ============================================================
+async def require_access_token(credentials: HTTPAuthorizationCredentials = Depends(access_security)) -> User:
+    """
+    Extrait et vérifie le token d’accès.
+    Retourne l'utilisateur correspondant si le token est valide.
+    """
     try:
-        auth_jwt.jwt_required()  # vérifie le token d'accès
-        decoded = auth_jwt.get_raw_jwt()  # Récupère les claims du JWT
-        user_id = decoded.get("sub")
+        # Décodage du JWT
+        access_payload = decode_token(credentials.credentials)
+        
+        # Extraction de l'user_id
+        user_id = access_payload.get("sub") or access_payload.get("subject", {}).get("sub")
 
-        user = await User.get(id=user_id)
+        if not user_id:
+            raise UnauthorizedException(detail="Token invalide (pas d'identifiant utilisateur)")
+
+        user = await User.get_or_none(id=user_id)
+        if not user or not getattr(user, "is_active", True):
+            raise UnauthorizedException(detail="Utilisateur inactif ou introuvable")
+
         return user
+
     except Exception as e:
+        logger.warning(f"Erreur de vérification du token : {e}")
         raise UnauthorizedException(detail="Token d'accès invalide ou expiré")
 
-async def require_admin(auth_jwt: AuthJWT = Depends()):
+
+# ============================================================
+# 🧩 Vérifie que l’utilisateur est administrateur
+# ============================================================
+async def require_admin(credentials: HTTPAuthorizationCredentials = Depends(access_security)) -> User:
     """
-    Vérifie que le token est valide et que l'utilisateur est admin.
+    Vérifie que le token d’accès est valide et que l’utilisateur est un admin.
     """
     try:
-        auth_jwt.jwt_required()  # Vérifie le token d'accès
-        decoded = auth_jwt.get_raw_jwt()  # Récupère les claims du JWT
-        user_id = decoded.get("sub")
+        # Décodage du JWT
+        access_payload = decode_token(credentials.credentials)
+        
+        # Extraction de l'user_id
+        user_id = access_payload.get("sub") or access_payload.get("subject", {}).get("sub")
 
-        user = await User.get(id=user_id)
-        if user.user_type != UserType.ADMIN:
-            raise UnauthorizedException(detail="Accès refusé")
+        if not user_id:
+            raise UnauthorizedException(detail="Token invalide (pas d'identifiant utilisateur)")
+
+        user = await User.get_or_none(id=user_id)
+        if not user or user.user_type != UserType.ADMIN:
+            raise UnauthorizedException(detail="Accès refusé — réservée aux administrateurs")
 
         return user
 
     except Exception as e:
+        logger.warning(f"Tentative d'accès admin non autorisée : {e}")
         raise UnauthorizedException(detail="Token invalide ou expiré")
-
+    
 # --------------------------------------
 # Création d’un utilisateur
 # --------------------------------------

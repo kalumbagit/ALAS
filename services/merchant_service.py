@@ -100,13 +100,13 @@ class MerchantService:
                 subscription_plan = await SubscriptionPlan.get_or_none(code=subscription_code or "free")
                 if not subscription_plan:
                     logger.warning(
-                        f"Code d'abonnement inconnu '{subscription_code}', application du plan FREE."
+                        f"Code d'abonnement inconnu '{subscription_code}', application du plan free."
                     )
                     subscription_plan = await SubscriptionPlan.get_or_none(code="free")
 
                 if not subscription_plan:
-                    logger.error("Le plan FREE est introuvable en base.")
-                    raise InternalServerException(detail="Plan FREE introuvable dans la base de données.")
+                    logger.error("Le plan free est introuvable en base.")
+                    raise InternalServerException(detail="Plan free introuvable dans la base de données.")
 
                 # 3️⃣ Création du marchand
                 merchant = await Merchant.create(
@@ -354,29 +354,29 @@ class MerchantService:
         - Vérifie que le plan demandé existe.
         - Vérifie que le plan est actif.
         - Change le plan seulement si différent du plan actuel.
-        - Si le marchand n'a pas de plan, applique FREE par défaut.
+        - Si le marchand n'a pas de plan, applique free par défaut.
         """
         try:
             merchant = await Merchant.get(user=user_id).prefetch_related("subscription_plan")
 
             # S'assure qu'un plan par défaut existe si aucun n'est attribué
             if not merchant.subscription_plan:
-                default_plan = await SubscriptionPlan.get_or_none(code="FREE")
+                default_plan = await SubscriptionPlan.get_or_none(code="free")
                 if not default_plan:
-                    logger.error("Le plan FREE n'existe pas dans la base de données.")
-                    raise InternalServerException(detail="Plan FREE introuvable dans la base de données.")
+                    logger.error("Le plan free n'existe pas dans la base de données.")
+                    raise InternalServerException(detail="Plan free introuvable dans la base de données.")
                 merchant.subscription_plan = default_plan
                 await merchant.save()
 
             # Récupération du plan demandé
             requested_plan = await SubscriptionPlan.get_or_none(code=data.subscription_code)
             if not requested_plan:
-                logger.warning(f"Code d'abonnement inconnu '{data.subscription_code}'. Le plan FREE sera appliqué.")
-                requested_plan = await SubscriptionPlan.get_or_none(code="FREE")
+                logger.warning(f"Code d'abonnement inconnu '{data.subscription_code}'. Le plan free sera appliqué.")
+                requested_plan = await SubscriptionPlan.get_or_none(code="free")
 
             if not requested_plan:
-                logger.error("Le plan FREE n'existe pas dans la base de données. Mise à jour impossible.")
-                raise InternalServerException(detail="Plan FREE introuvable dans la base de données.")
+                logger.error("Le plan free n'existe pas dans la base de données. Mise à jour impossible.")
+                raise InternalServerException(detail="Plan free introuvable dans la base de données.")
 
             # Vérifie si le plan est actif
             if not requested_plan.is_active:

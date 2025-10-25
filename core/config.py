@@ -1,4 +1,6 @@
-from pydantic import BaseSettings, validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
+from typing import Optional, List
 
 class Settings(BaseSettings):
     # --- Database ---
@@ -12,11 +14,11 @@ class Settings(BaseSettings):
     # --- App ---
     APP_NAME: str
     APP_VERSION: str
-    APP_TYPE:str  # renseigne sur le type de l'application:  c'est une api ou un mvc ou autre
-    API_VERSION:str
-    APP_ENV: str 
+    APP_TYPE: str
+    API_VERSION: str
+    APP_ENV: str
     APP_PORT: int
-    DEBUG: bool
+    DEBUG: bool = False
 
     # --- Redis ---
     REDIS_HOST: str
@@ -31,48 +33,71 @@ class Settings(BaseSettings):
 
     # --- Logging ---
     LOG_LEVEL: str = "INFO"
-    LOG_FORMAT: str = "json"  # "json" ou "console"
+    LOG_FORMAT: str = "json"
 
     # --- CORS ---
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     # --- Allowed Hosts ---
-    ALLOWED_HOSTS: list[str] = ["*"]
+    ALLOWED_HOSTS: List[str] = ["*"]
 
     # --- DB URL générée dynamiquement ---
-    DB_URL: str | None = None
+    DB_URL: Optional[str] = None
 
-    # --- Minio depencencies----
-    MINIO_ENDPOINT:str
-    MINIO_ACCESS_KEY:str
-    MINIO_SECRET_KEY:str
-    MINIO_SECURE:bool
-    MINIO_BUCKET_DELIVERER_IDENTITY:str
-    MINIO_BUCKET_MERCHANT_DOCS:str
-    MINIO_BUCKET_USER_AVATARS:str
+    # --- Minio ---
+    MINIO_ENDPOINT: str
+    MINIO_ACCESS_KEY: str
+    MINIO_SECRET_KEY: str
+    MINIO_SECURE: bool
+    MINIO_BUCKET_DELIVERER_IDENTITY: str
+    MINIO_BUCKET_MERCHANT_DOCS: str
+    MINIO_BUCKET_USER_AVATARS: str
 
-    @validator("DB_URL", pre=True, always=True)
-    def build_db_url(cls, v, values):
+    # ==========================
+    # 🔹 Validators (v2 syntax)
+    # ==========================
+
+    @field_validator("DB_URL", mode="before")
+    def build_db_url(cls, v, info):
         """
         Construit dynamiquement l'URL de la base à partir des autres variables.
         """
         if v:
             return v
-        engine = values.get("DB_ENGINE", "postgres")
+
+        data = info.data or {}
+        engine = data.get("DB_ENGINE", "postgres")
+
         if engine == "postgres":
-            return f"postgres://{values.get('DB_USER')}:{values.get('DB_PASSWORD')}@{values.get('DB_HOST')}:{values.get('DB_PORT')}/{values.get('DB_NAME')}"
+            return (
+                f"postgresql://{data.get('DB_USER')}:{data.get('DB_PASSWORD')}"
+                f"@{data.get('DB_HOST')}:{data.get('DB_PORT')}/{data.get('DB_NAME')}"
+            )
         elif engine == "sqlite":
-            return f"sqlite:///{values.get('DB_NAME', 'app')}.db"
+            return f"sqlite:///{data.get('DB_NAME', 'app')}.db"
         else:
-            raise ValueError("Unsupported DB_ENGINE type") 
-    
-    @validator("JWT_SECRET")
+            raise ValueError("Unsupported DB_ENGINE type")
+
+    @field_validator("JWT_SECRET")
     def check_jwt_secret(cls, v):
         if not v or v.strip() == "":
             raise ValueError("JWT_SECRET must be defined in environment or .env")
         return v
-    class Config:
-        env_file = ".env"
-        extra = "ignore"  # ignore les variables non utilisées
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",")]
+        return v
+
+
+    # ==========================
+    # 🔹 Config du modèle
+    # ==========================
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
 
 settings = Settings()

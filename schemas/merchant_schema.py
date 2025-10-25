@@ -1,5 +1,5 @@
 from typing import Generic, TypeVar, List,Optional, List
-from pydantic import BaseModel, Field, EmailStr, HttpUrl, constr, validator
+from pydantic import BaseModel, Field, HttpUrl,EmailStr,field_validator,ConfigDict
 from models.user_model import BusinessType
 from schemas.user_schema import UserCreateSchema, UserOutSchema
 
@@ -21,8 +21,9 @@ class SubscriptionPlanOutSchema(BaseModel):
     monthly_fee: float = Field(..., description="Frais mensuels fixes associés au plan")
     is_active: bool = Field(..., description="Indique si le plan est actuellement disponible")
 
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra = {
             "example": {
                 "code": "pro",
                 "name": "Professionnel",
@@ -32,7 +33,7 @@ class SubscriptionPlanOutSchema(BaseModel):
                 "is_active": True
             }
         }
-
+    )
 
 # ================================================================
 # 🧱 2️⃣ - DÉTAILS DU MARCHAND
@@ -51,19 +52,20 @@ class MarchantDetailsCreateSchema(BaseModel):
         None, description="Code du plan d’abonnement choisi (ex: 'basic', 'pro', etc.)"
     )
 
-    @validator("business_name")
+    @field_validator("business_name")
     def normalize_name(cls, v):
         return v.strip().title()
 
-    @validator("siret")
+    @field_validator("siret")
     def validate_siret(cls, v):
         v = v.strip()
         if len(v) < 4:
             raise ValueError("Le SIRET doit contenir au moins 4 caractères.")
         return v
     
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra = {
             "example": {
                 "business_name": "Alice Moto Livraison",
                 "business_type": "BOUTIQUE",
@@ -74,6 +76,7 @@ class MarchantDetailsCreateSchema(BaseModel):
                 "subscription_code": "pro"
             }
         }
+    )
 
 # ================================================================
 # 🧱 2️⃣ - LOCALISATION DU MARCHAND
@@ -89,7 +92,7 @@ class UserLocationCreateSchema(BaseModel):
     longitude: float
 
     # Champs texte : non vides et strip
-    @validator("address", "city", "country")
+    @field_validator("address", "city", "country")
     def not_empty(cls, v, field):
         v = v.strip()
         if not v:
@@ -97,7 +100,7 @@ class UserLocationCreateSchema(BaseModel):
         return v
 
     # Postal code : optionnel mais pas vide si fourni
-    @validator("postal_code")
+    @field_validator("postal_code")
     def postal_code_valid(cls, v):
         v = v.strip()
         if not v:
@@ -105,13 +108,13 @@ class UserLocationCreateSchema(BaseModel):
         return v
 
     # Latitude et longitude : bornes réalistes
-    @validator("latitude")
+    @field_validator("latitude")
     def latitude_valid(cls, v):
         if not -90 <= v <= 90:
             raise ValueError("La latitude doit être comprise entre -90 et 90")
         return v
 
-    @validator("longitude")
+    @field_validator("longitude")
     def longitude_valid(cls, v):
         if not -180 <= v <= 180:
             raise ValueError("La longitude doit être comprise entre -180 et 180")
@@ -129,8 +132,9 @@ class MarchantCreateSchema(BaseModel):
     details: MarchantDetailsCreateSchema = Field(..., description="Informations spécifiques du commerce")
     location: UserLocationCreateSchema = Field(..., description="Localisation principale du marchand")
 
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra = {
             "example": {
                 "user_data": {
                     "email": "marchant@example.com",
@@ -159,7 +163,7 @@ class MarchantCreateSchema(BaseModel):
                 }
             }
         }
-
+    )
 
 # ================================================================
 # 🧾 4️⃣ - MISE À JOUR DES INFOS MARCHAND
@@ -174,14 +178,16 @@ class MarchantUpdateSchema(BaseModel):
     banner_url: Optional[HttpUrl] = Field(None, description="URL de la bannière du marchand")
     logo_url: Optional[HttpUrl] = Field(None, description="URL du logo du marchand")
 
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra = {
             "example": {
                 "business_name": "Alice Moto Livraison",
                 "description": "Mise à jour du profil avec une nouvelle bannière",
                 "banner_url": "https://cdn.example.com/new_banner.jpg"
             }
         }
+    )
 
 
 #=================================================================
@@ -193,12 +199,14 @@ class MarchantSubscriptionUpdateSchema(BaseModel):
 
     subscription_code: str = Field(..., description="Code du plan d'abonnement à appliquer")
 
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra = {
             "example": {
                 "subscription_code": "pro"
             }
         }
+    )
 
 
 # ================================================================
@@ -220,8 +228,9 @@ class MarchantDetailsOutputSchema(BaseModel):
     siret: str
     subscription_plan: Optional[SubscriptionPlanOutSchema] = None
 
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra = {
             "example": {
                 "user_data": {
                     "id": "usr_1234",
@@ -246,6 +255,7 @@ class MarchantDetailsOutputSchema(BaseModel):
                 }
             }
         }
+    )
 
 
 # ================================================================
@@ -268,8 +278,9 @@ class MarchantDetailsOutputPublicSchema(BaseModel):
     description: Optional[str]
     logo_url: Optional[HttpUrl]
 
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra = {
             "example": {
                 "email": "marchant@example.com",
                 "first_name": "Jean",
@@ -282,6 +293,7 @@ class MarchantDetailsOutputPublicSchema(BaseModel):
                 "logo_url": "https://cdn.example.com/logos/moto_shop.png"
             }
         }
+    )
 
 
 # ================================================================
@@ -293,8 +305,10 @@ class MarchantSuccesRequestSchema(BaseModel):
 
     detail: str = Field(..., description="Message de confirmation")
 
-    class Config:
-        schema_extra = {"example": {"detail": "Opération effectuée avec succès"}}
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra = {"example": {"detail": "Opération effectuée avec succès"}}
+    )
 
 
 #==============================================================
@@ -323,8 +337,9 @@ class MarchantSaleHistorySchema(BaseModel):
     net_amount: float
     sale_date: str  # ISO datetime string
 
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra = {
             "example": {
                 "sale_id": "SALE12345",
                 "total_amount": 10000.0,
@@ -333,3 +348,4 @@ class MarchantSaleHistorySchema(BaseModel):
                 "sale_date": "2025-10-20T09:00:00Z"
             }
         }
+    )

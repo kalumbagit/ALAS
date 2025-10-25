@@ -1,14 +1,14 @@
-from pydantic import BaseModel, Field, validator, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl,field_validator,ConfigDict
 from typing import Optional, List
 from datetime import datetime
 
 from models.user_model import IdentityType, VehicleType
-from schemas.user_schema import UserCreateSchema,UserOutSchema,UserUpdateSchema
+from schemas.user_schema import UserCreateSchema,UserOutSchema
 
 
 class DelivererDetailsCreateSchema(BaseModel):
     """Sous-schéma pour les informations spécifiques du livreur"""
-    vehicle_type: VehicleType = Field(..., description="Type de véhicule du livreur")
+    vehicule_type: VehicleType = Field(..., description="Type de véhicule du livreur")
     identity_type: IdentityType = Field(..., description="Type de pièce d'identité")
     identity_code: str = Field(..., description="Numéro de la pièce d'identité")
     sponsor_code: Optional[str] = Field(None, description="Code du parrain (si le livreur est parrainé)")
@@ -20,8 +20,9 @@ class DelivererCreateSchema(BaseModel):
     user_data: UserCreateSchema = Field(..., description="Données du compte utilisateur associé")
     details: DelivererDetailsCreateSchema = Field(..., description="Détails spécifiques du livreur")
 
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra = {
             "example": {
                 "user_data": {
                     "email": "livreur@example.com",
@@ -41,6 +42,7 @@ class DelivererCreateSchema(BaseModel):
                 }
             }
         }
+    )
     
 class DelivererUpdateSchema(BaseModel):
     """Schéma pour la mise à jour des données d'un livreur (modifiables par lui-même)."""
@@ -61,8 +63,9 @@ class DelivererDetailsOutputSchema(BaseModel):
     completed_deliveries: int = Field(..., description="Nombre total de livraisons terminées")
     total_referals: int = Field(..., description="Nombre total de parainages")
 
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra = {
             "example": {
                 "user_data": {
                     "id": "usr_1234",
@@ -79,6 +82,7 @@ class DelivererDetailsOutputSchema(BaseModel):
                 "total_referals":80
             }
         }
+    )
 
 class DelivererStatusUpdateSchema(BaseModel):
     """
@@ -86,12 +90,14 @@ class DelivererStatusUpdateSchema(BaseModel):
     """
     is_online: bool
 
-    class Config:
+    model_config = ConfigDict(
+        from_attributes=True,
         json_schema_extra = {
             "example": {
                 "is_online": True
             }
         }
+    )
 
 class DelivererSuspensionActiveSchema(BaseModel):
     """
@@ -101,12 +107,14 @@ class DelivererSuspensionActiveSchema(BaseModel):
     suspension_raison:str = Field(..., description="Raison de la suspension")
     suspension_end:Optional[datetime] = Field(None, description="Date de fin de la suspension")
 
-    class Config:
+    model_config = ConfigDict(
+        from_attributes=True,
         json_schema_extra = {
             "example": {
                 "is_suspended": False
             }
         }
+    )
 
 class DelivererSuspensionDesactivateSchema(BaseModel):
     """
@@ -114,12 +122,14 @@ class DelivererSuspensionDesactivateSchema(BaseModel):
     """
     detail: str = Field(..., description="Message de confirmation de la désactivation de la suspension")
 
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra = {
             "example": {
                 "detail": "Livreur réactivé avec succès"
             }
         }
+    )
 
 class DelivererSuccesRequestSchema(BaseModel):
     """
@@ -127,12 +137,14 @@ class DelivererSuccesRequestSchema(BaseModel):
     """
     detail: str = Field(..., description="operation effectuée avec succès")
 
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra = {
             "example": {
                 "detail": "operation effectuée avec succès"
             }
         }
+    )
 
 class DelivererReferralHistorySchema(BaseModel):
     id: str
@@ -158,8 +170,9 @@ class DelivererEarningsSchema(BaseModel):
     total_earnings: float
     referral_earnings: float
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
 
 class DelivererEarningsCreateEventSchema(BaseModel):
     deliverer_id: str
@@ -172,15 +185,16 @@ class DelivererEarningsCreateEventSchema(BaseModel):
         description="Référence unique de la livraison associée"
     )
 
-    @validator("delivery_reference")
+    @field_validator("delivery_reference")
     def check_delivery_reference(cls, v):
         if v and len(v.strip()) == 0:
             raise ValueError("La référence de livraison ne peut pas être vide")
         return v
 
     
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra = {
             "example": {
                 "deliverer_id": "uuid-livreur-1234",
                 "amount": 150.0,
@@ -189,6 +203,7 @@ class DelivererEarningsCreateEventSchema(BaseModel):
                 "status": "PENDING"
             }
         }
+    )
 
 class DelivererEarningsStatusChangeSchema(BaseModel):
     earning_id: str

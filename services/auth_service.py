@@ -1,17 +1,15 @@
-# Standard library
-from datetime import datetime
+# ==========================================
+# 🧠 AuthService — version FastAPI-JWT moderne
+# ==========================================
+
 from typing import Optional
 
-# Third-party libraries
 from fastapi import HTTPException
-from fastapi_jwt_auth import AuthJWT
-from fastapi_jwt_auth.exceptions import MissingTokenError, JWTDecodeError,RevokedTokenError
+from fastapi.security import  HTTPAuthorizationCredentials
 from passlib.context import CryptContext
-from tortoise.exceptions import DoesNotExist,OperationalError
-import jwt
+from tortoise.exceptions import DoesNotExist, OperationalError
 
-# Local application imports
-from models.user_model import User,DelivererDetails,Merchant,UserType
+from models.user_model import User, DelivererDetails, Merchant, UserType
 from schemas.user_schema import (
     LoginDataSchema,
     LoginResponseSchema,
@@ -19,11 +17,13 @@ from schemas.user_schema import (
     UserOutSchema,
 )
 from core.exceptions import UnauthorizedException, InternalServerException
+from core.security import jwt, check_if_token_in_denylist, revoke_token,decode_token
 from core.logging import logger
 
 
-# Contexte pour le hash des mots de passe
-# Contexte pour le hash des mots de passe
+# ------------------------------
+# 🔐 Contexte de hash
+# ------------------------------
 pwd_context = CryptContext(
     schemes=["argon2", "bcrypt"],        # ordre : argon2 préféré si présent
     default="argon2",                   # crée les nouveaux hashes avec argon2
@@ -36,9 +36,9 @@ class AuthService:
     Service d'authentification et de gestion des tokens JWT
     """
 
-    # ------------------------------
-    # Gestion des mots de passe
-    # ------------------------------
+    # ===================================================
+    # 🔸 Gestion des mots de passe
+    # ===================================================
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """
         Vérifie si le mot de passe correspond au hash
@@ -52,9 +52,9 @@ class AuthService:
         return pwd_context.hash(password)
     
     
-    # ------------------------------
-    # Authentification utilisateur
-    # ------------------------------
+    # ===================================================
+    # 🔸 Authentification utilisateur
+    # ===================================================
        
     async def authenticate_user(self, data:LoginDataSchema) -> Optional[User]:
         """
@@ -125,7 +125,7 @@ class AuthService:
     # ------------------------------
     # Login / Logout / Refresh
     # ------------------------------
-    async def login(self, data: LoginDataSchema,auth_jwt: AuthJWT) -> LoginResponseSchema:
+    async def login(self, data: LoginDataSchema) -> LoginResponseSchema:
         """
         Authentifie un utilisateur et génère les tokens JWT avec gestion robuste des erreurs.
         """
@@ -141,15 +141,18 @@ class AuthService:
 
             # Génération des tokens JWT
             try:
-                access_token = auth_jwt.create_access_token(
-                    subject=str(user.id),
-                    user_claims={"usertype": user.user_type.value}  # ajoute le type utilisateur
-                )
-
-                refresh_token = auth_jwt.create_refresh_token(
-                    subject=str(user.id),
-                    user_claims={"usertype": user.user_type.value}  # idem
-                )
+                claims_data ={"sub": str(user.id),"user_type": user.user_type.value}
+                # Claims spécifiques pour merchant
+                if user.user_type == UserType.MERCHANT:
+                    merchant = await Merchant.get_or_none(user=user.id).prefetch_related("subscription_plan")
+                    if merchant and merchant.subscription_plan:
+                        claims_data["subscription_plan"] = merchant.subscription_plan.code
+                    else:
+                        claims_data["subscription_plan"] = 'free'  # ou "free" selon ta logique
+                
+                # Création des tokens
+                access_token = jwt.create_access_token(claims_data)
+                refresh_token = jwt.create_refresh_token({"sub": str(user.id)})
             except Exception as e:
                 logger.error(f"Erreur lors de la génération du token JWT pour {data.email} : {e}")
                 raise InternalServerException(detail="Erreur lors de la création du token")
@@ -182,228 +185,123 @@ class AuthService:
             logger.exception(f"Erreur inattendue lors du login de {data.email} : {e}")
             raise InternalServerException(detail="Erreur interne lors de l’authentification")
 
-    async def logout(self, auth_jwt: AuthJWT,access_token: str, refresh_token: str) -> dict:
+    # ===================================================
+    # 🔸 Logout complet (access + refresh)
+    # ===================================================
+    async def logout(self, access_token: str, refresh_token: str) -> LoginResponseSchema:
         """
-        Déconnecte l'utilisateur en révoquant les deux tokens (access + refresh).
-        Les deux tokens sont attendus dans les headers :
-        - Authorization: Bearer <access_token>
-        - X-Refresh-Token: <refresh_token>
+        Révoque l'access token et le refresh token pour déconnexion sécurisée.
         """
+        if not access_token or not refresh_token:
+            raise UnauthorizedException("Tokens manquants")
+
         try:
+            # Décodage des tokens
+            access_payload = decode_token(access_token)
+            refresh_payload = decode_token(refresh_token)  # refresh_token est déjà str
 
-            # --------------------------------------------------------------------
-            # 1️⃣ Décodage du refresh token
-            # --------------------------------------------------------------------
-            if not refresh_token:
-                raise UnauthorizedException(detail="Refresh token manquant")
+            # Révocation dans la denylist
+            await revoke_token(access_payload["jti"], access_payload["exp"])
+            await revoke_token(refresh_payload["jti"], refresh_payload["exp"])
 
-            try:
-                decoded_refresh = auth_jwt._verified_token(refresh_token)
-            except Exception as e:
-                logger.warning(f"Refresh token invalide : {e}")
-                raise UnauthorizedException(detail="Refresh token invalide ou expiré")
+             # Logger avec fallback si 'sub' absent
+            user_id = access_payload.get("sub") or access_payload.get("subject", {}).get("sub", "inconnu")
+            logger.info(f"Logout successful for user {user_id}")
 
-            refresh_jti = decoded_refresh.get("jti")
-            refresh_exp = decoded_refresh.get("exp")
+            return LoginResponseSchema(detail="Déconnexion réussie, tokens révoqués")
 
-            if not refresh_jti or not refresh_exp:
-                raise UnauthorizedException(detail="Refresh token mal formé")
-            
-            # --------------------------------------------------------------------
-            # 2️⃣ Décodage du access token
-            # --------------------------------------------------------------------
-            if not access_token:
-                raise UnauthorizedException(detail="Access token manquant")
-
-            try:
-                decoded_access = auth_jwt._verified_token(access_token)
-            except Exception as e:
-                logger.warning(f"Access token invalide : {e}")
-                raise UnauthorizedException(detail="Access token invalide ou expiré")
-
-            access_jti = decoded_access.get("jti")
-            access_exp = decoded_access.get("exp")
-
-            if not access_jti or not access_exp:
-                raise UnauthorizedException(detail="Access token mal formé")
-
-            # --------------------------------------------------------------------
-            # 3️⃣ Révocation dans Redis
-            # --------------------------------------------------------------------
-            from core.redis import revoke_token
-
-            # Conversion timestamps
-            access_exp_ts = int(access_exp) if isinstance(access_exp, int) else int(datetime.timestamp(access_exp))
-            refresh_exp_ts = int(refresh_exp) if isinstance(refresh_exp, int) else int(datetime.timestamp(refresh_exp))
-
-            await revoke_token(access_jti, access_exp_ts)
-            await revoke_token(refresh_jti, refresh_exp_ts)
-
-
-            logger.info(f"✅ Tokens révoqués : access_jti={access_jti}, refresh_jti={refresh_jti}")
-
-            return {"detail": "Déconnexion réussie, tous les tokens révoqués"}
-        
-        # --------------------------------------------------------------------
-        # 3️⃣ Révocation dans Redis
-        # --------------------------------------------------------------------
-
-        except MissingTokenError:
-            logger.warning("Tentative de déconnexion sans token JWT")
-            raise UnauthorizedException(detail="Token manquant ou non fourni")
-        
-        except JWTDecodeError:
-            logger.error("Échec du décodage du token JWT lors du logout")
-            raise UnauthorizedException(detail="Token invalide ou mal formé")
-        
-        except UnauthorizedException:
-            # Relaisse passer nos exceptions custom
-            raise
-
+        except UnauthorizedException as e:
+            # Token invalide ou expiré
+            raise e
         except Exception as e:
-            logger.exception(f"Erreur inattendue lors du logout : {e}")
-            raise InternalServerException(detail="Erreur interne lors de la déconnexion")
-  
-    async def refresh(self, auth_jwt: AuthJWT,refresh_token: str) -> TokenResponseSchema:
-        """
-        Rafraîchit le token d’accès à partir d’un refresh token valide.
-        - Récupère le refresh token depuis le header `X-Refresh-Token`.
-        - Vérifie s’il n’est pas révoqué.
-        - Génère un nouveau access token.
-        """
+            logger.exception(f"Erreur interne lors du logout: {e}")
+            raise InternalServerException("Erreur interne lors du logout")
+
+
+    # ===================================================
+    # 🔸 Refresh Token
+    # ===================================================
+    async def refresh(self, refresh_token: str) -> TokenResponseSchema:
         try:
-
-            # --------------------------------------------------------------------
-            # 1️⃣ Vérifie la présence du refresh token dans les headers
-            # --------------------------------------------------------------------
-            if not refresh_token:
-                raise UnauthorizedException(detail="Refresh token manquant dans les en-têtes")
-
-            # --------------------------------------------------------------------
-            # 2️⃣ Vérifie et décode le refresh token
-            # --------------------------------------------------------------------
+            # 1️⃣ Décodage du refresh token
             try:
-                decoded_refresh = auth_jwt._verified_token(refresh_token)
-            except Exception as e:
-                logger.warning(f"Refresh token invalide ou expiré : {e}")
-                raise UnauthorizedException(detail="Refresh token invalide ou expiré")
+                payload = decode_token(refresh_token)
+            except UnauthorizedException:
+                raise
 
-            refresh_jti = decoded_refresh.get("jti")
-            refresh_exp = decoded_refresh.get("exp")
+            # 2️⃣ Récupération de l'utilisateur
+            subject_data = payload.get("subject") or {}
+            user_id = subject_data.get("sub")
+            if not user_id:
+                raise UnauthorizedException(detail="Token invalide, 'sub' manquant")
 
-            if not refresh_jti or not refresh_exp:
-                raise UnauthorizedException(detail="Refresh token mal formé")
-
-            # --------------------------------------------------------------------
-            # 3️⃣ Vérifie si le refresh token est dans la denylist
-            # --------------------------------------------------------------------
-            from core.security import check_if_token_in_denylist
-            if check_if_token_in_denylist({"jti": refresh_jti}):
-                logger.warning(f"Refresh token révoqué détecté : jti={refresh_jti}")
-                raise UnauthorizedException(detail="Refresh token révoqué. Veuillez vous reconnecter.")
-
-            # --------------------------------------------------------------------
-            # 4️⃣ Récupère l’utilisateur depuis le subject du token
-            # --------------------------------------------------------------------
-            current_user_id = decoded_refresh.get("sub")
-            if not current_user_id:
-                raise UnauthorizedException(detail="Token invalide ou mal formé")
-
-            try:
-                user = await User.get(id=current_user_id)
-            except DoesNotExist:
+            user = await User.get_or_none(id=user_id)
+            if not user:
                 raise UnauthorizedException(detail="Utilisateur introuvable")
 
-            # --------------------------------------------------------------------
-            # 5️⃣ Génère un nouveau access token
-            # --------------------------------------------------------------------
-            new_access_token = auth_jwt.create_access_token(
-                    subject=str(user.id),
-                    user_claims={"usertype": user.user_type.value}  # ajoute le type utilisateur
-                )
+            # 3️⃣ Vérification que le token n'est pas révoqué
+            if check_if_token_in_denylist(payload):
+                raise UnauthorizedException(detail="Refresh token révoqué")
 
-            logger.info(f"✅ Token rafraîchi avec succès pour {user.email}")
+            # 4️⃣ Préparation des claims pour le nouveau access token
+            claims_data = {
+                "sub": str(user.id),
+                "user_type": user.user_type.value
+            }
 
+            # Claims spécifiques pour les merchants
+            if user.user_type == UserType.MERCHANT:
+                merchant = await Merchant.get_or_none(user=user.id).prefetch_related("subscription_plan")
+                if merchant and merchant.subscription_plan:
+                    claims_data["subscription_plan"] = merchant.subscription_plan.code
+                else:
+                    claims_data["subscription_plan"] = "free"
+
+            # 5️⃣ Génération du nouveau access token
+            new_access_token = jwt.create_access_token(claims_data)
+
+            logger.info(f"Token rafraîchi pour {user.email}")
+
+            # 6️⃣ Retour du token
             return TokenResponseSchema(
                 access_token=new_access_token,
-                token_type="bearer"
+                token_type="bearer",
             )
 
-        # ------------------------------
-        # Gestion fine des exceptions
-        # ------------------------------
-        except MissingTokenError:
-            logger.warning("Tentative de rafraîchissement sans token")
-            raise UnauthorizedException(detail="Aucun token fourni")
-
-        except JWTDecodeError:
-            logger.warning("Échec du décodage du refresh token")
+        except Exception as e:
+            logger.exception(f"Erreur refresh token : {e}")
             raise UnauthorizedException(detail="Token invalide ou expiré")
 
-        except UnauthorizedException:
-            # Relaisse passer nos exceptions custom
-            raise
 
-        except Exception as e:
-            logger.exception(f"Erreur interne inattendue lors du refresh token : {e}")
-            raise InternalServerException(detail="Erreur interne lors du rafraîchissement du token")
-
-    # ------------------------------
-    # Dépendance pour récupérer l'utilisateur courant
-    # ------------------------------
-    async def get_current_user(self, auth_jwt: AuthJWT) -> UserOutSchema:
+    # ===================================================
+    # 🔸 Récupération de l’utilisateur courant
+    # ===================================================
+    async def get_current_user(self, credentials: HTTPAuthorizationCredentials) -> UserOutSchema:
         try:
-            auth_jwt.jwt_required()
-            raw_jwt = auth_jwt.get_raw_jwt()
-            jti = raw_jwt.get("jti")
-            user_id = auth_jwt.get_jwt_subject()
 
-            if not jti or not user_id:
-                logger.warning("Token JWT incomplet ou mal formé détecté lors de get_current_user()")
-                raise UnauthorizedException(detail="Token invalide ou incomplet")
-
-            # 🧩 Récupération de l’utilisateur en base
+            if not credentials:
+                raise UnauthorizedException(detail="Token manquant")
+            
+            # Décodage du token
             try:
-                user = await User.get(id=user_id)
-            except DoesNotExist:
-                logger.warning(f"Utilisateur introuvable pour id={user_id}")
-                raise UnauthorizedException(detail="Utilisateur introuvable")
+                payload = decode_token(credentials.credentials)
+            except UnauthorizedException :
+                raise
 
-            # 🔍 Vérifie l’état du compte si applicable
-            if hasattr(user, "is_active") and not user.is_active:
-                logger.info(f"Accès refusé : compte inactif pour utilisateur {user.email}")
-                raise UnauthorizedException(detail="Compte désactivé. Veuillez contacter l’administrateur.")
+            subject_data = payload.get("subject") or {}
+            user_id = subject_data.get("sub")
+            if not user_id:
+                raise UnauthorizedException(detail="Token invalide, 'sub' manquant")
 
-            logger.debug(f"Utilisateur courant récupéré avec succès : {user.email}")
+            if check_if_token_in_denylist(payload):
+                raise UnauthorizedException(detail="Token révoqué")
+
+            user = await User.get_or_none(id=user_id)
+            if not user or not getattr(user, "is_active", True):
+                raise UnauthorizedException(detail="Utilisateur inactif ou introuvable")
 
             return UserOutSchema.from_orm(user)
-
-
-       # ------------------------------
-        # Gestion des erreurs JWT
-        # ------------------------------
-        except MissingTokenError:
-            logger.warning("Tentative d’accès sans token JWT")
-            raise UnauthorizedException(detail="Token non fourni")
-
-        except RevokedTokenError as e :
-            logger.warning(f"Tentative d’accès avec un token révoqué : plus de details {e.message} ")
-            raise UnauthorizedException(detail=f"Token révoqué. Veuillez vous reconnecter. plus de details {e.message} ")
-
-        except JWTDecodeError:
-            logger.error("Erreur de décodage du token JWT lors de get_current_user()")
-            raise UnauthorizedException(detail="Token invalide ou expiré")
-
-        # ------------------------------
-        # Gestion générique
-        # ------------------------------
-        except UnauthorizedException:
-            raise
-
-        except jwt.PyJWTError as e:
-            logger.error(f"Erreur PyJWT inattendue lors de get_current_user() : {e}")
-            raise UnauthorizedException(detail="Erreur lors de la validation du token")
-
         except Exception as e:
-            logger.exception(f"Erreur inattendue lors de la récupération de l'utilisateur courant : {e}")
-            raise InternalServerException(detail="Erreur interne lors de la récupération de l'utilisateur")
+            logger.exception(f"Erreur récupération utilisateur courant : {e}")
+            raise UnauthorizedException(detail="Erreur d’authentification")
+    

@@ -1,5 +1,5 @@
 # core/redis.py
-import aioredis
+from redis import asyncio as aioredis
 import time
 from core.config import settings
 import redis as RD

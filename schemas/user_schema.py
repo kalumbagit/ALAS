@@ -13,7 +13,7 @@ class UserCreateSchema(BaseModel):
     first_name: str = Field(..., max_length=30)
     last_name: str = Field(..., max_length=30)
     user_type: Optional[UserType] = UserType.CUSTOMER
-    avatar_url: Optional[str]
+    avatar_url: Optional[str]=None
 
 # ----------------------
 # Schéma pour mise à jour complète (PUT)/ partielle (PATCH)
@@ -29,6 +29,7 @@ class UserUpdateSchema(BaseModel):
     avatar_url: Optional[str] = None
 
     model_config = ConfigDict(
+        from_attributes=True,
         json_schema_extra={
             "example": {
                 "first_name": "Nouveau prénom",
@@ -97,6 +98,7 @@ class LoginDataSchema(BaseModel):
     password: str
 
     model_config = ConfigDict(
+        from_attributes=True,
         json_schema_extra={
             "example": {
                 "email": "user@example.com",
@@ -129,6 +131,7 @@ class RefreshTokenDataSchema(BaseModel):
     refresh_token: str
 
     model_config = ConfigDict(
+        from_attributes=True,
         json_schema_extra={
             "example": {
                 "refresh_token": "votre_refresh_token_ici"
@@ -142,12 +145,14 @@ class UserStatusUpdateSchema(BaseModel):
     """
     is_active: bool
 
-    class Config:
+    model_config = ConfigDict(
+        from_attributes=True,
         json_schema_extra = {
             "example": {
                 "is_active": True
             }
         }
+    )
 
 class UserRatingUpdateSchema(BaseModel):
     rating: float = Field(ge=0, le=5, description="Note entre 0 et 5")
@@ -185,11 +190,6 @@ class APILoginResponse(BaseModel):
     success: bool = True
     message: str = "Connexion réussie"
     data: LoginResponseSchema
-
-############################################################################
-#Schema de retour personalisés 
-############################################################################    
-
 
 
 

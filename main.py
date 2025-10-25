@@ -10,7 +10,6 @@ from core.database import init_db, close_db
 from core.config import settings
 from core.logging import setup_logging, logger
 from core.middleware import LoggingMiddleware, RateLimitMiddleware
-from core import security # 👈 IMPORT INDISPENSABLE ici POUR LA GESTION DE LA CONFIG GLOBALE DE GESTION DE SECURITE 
 
 # Controllers
 from controllers import (
