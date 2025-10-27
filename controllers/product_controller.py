@@ -10,20 +10,20 @@ from schemas.filter_schemas import (
     ProductQuerySchema,
     DateRangeFilterSchema
 )
-from services.product_service import ProductService
+from services.product_service import ProductService,PaginatedResponseSchema
 
 # Import des utilitaires depuis le contrôleur catégorie
 from .category_controller import (
     handle_exception,
     get_user_id_or_raise,
     get_current_user,
+    get_current_admin,
+    get_current_merchant,
     get_user_type_or_raise,
     get_pagination_params,
-    get_category_id,
     _validate_admin_access
 )
 from core.dependencies import (
-    validate_merchant_access,
     get_product_query_params,
     get_product_id
 )
@@ -65,7 +65,6 @@ async def get_product(
     product_id: UUID = Depends(get_product_id),
     include_category: bool = Query(True, description="Inclure les données de la catégorie"),
     include_analytics: bool = Query(False, description="Inclure les données analytiques"),
-    current_user: UUID = Depends(get_current_user)
 ):
     """
     Récupère un produit par son ID
@@ -80,10 +79,10 @@ async def get_product(
     except Exception as e: 
         handle_exception(e)
 
-@router.get("", response_model=ResponseSchema)
+@router.get("", response_model=PaginatedResponseSchema)
 async def list_products(
     query_params: ProductQuerySchema = Depends(get_product_query_params),
-    current_user: UUID = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """
     Liste les produits avec pagination et filtres avancés
@@ -91,8 +90,11 @@ async def list_products(
     try:
         
         # Pour les utilisateurs normaux, on restreint à leurs produits
-        merchant_id = await validate_merchant_access(current_user)
-        user_id = current_user if not merchant_id else None
+        user_type=get_user_type_or_raise(current_user)
+        if user_type =="merchant":
+            user_id=get_user_id_or_raise(current_user)
+        else:
+            user_id =None
         
         return await ProductService.list_products(
             query_params=query_params,
@@ -101,22 +103,28 @@ async def list_products(
     except Exception as e: 
         handle_exception(e)
 
-@router.put("/{product_id}", response_model=ResponseSchema)
+@router.patch("/{product_id}", response_model=ResponseSchema)
 async def update_product(
     payload: ProductUpdate,
     product_id: UUID = Depends(get_product_id),
-    current_user: UUID = Depends(get_current_user),
+    current_user = Depends(get_current_user),
     return_data: bool = Query(False, description="Inclure les données mises à jour dans la réponse")
 ):
     """
     Met à jour un produit
     """
     try:
-        
+
+        # Pour les utilisateurs normaux, on restreint à leurs produits
+        user_type=get_user_type_or_raise(current_user)
+        if user_type =="merchant":
+            user_id=get_user_id_or_raise(current_user)
+        else:
+            user_id =None
         return await ProductService.update_product(
             product_id=product_id,
             payload=payload,
-            updated_by=current_user,
+            updated_by=user_id,
             return_data=return_data
         )
     except Exception as e: 
@@ -125,7 +133,6 @@ async def update_product(
 @router.delete("/{product_id}", response_model=ResponseSchema)
 async def delete_product(
     product_id: UUID = Depends(get_product_id),
-    current_user: UUID = Depends(get_current_user)
 ):
     """
     Supprime un produit (soft delete)
@@ -145,7 +152,6 @@ async def update_stock(
     product_id: UUID = Depends(get_product_id),
     new_stock: int = Body(..., ge=0, description="Nouvelle quantité en stock"),
     reason: str = Body("manual_update", description="Raison de la mise à jour"),
-    current_user: UUID = Depends(get_current_user)
 ):
     """
     Met à jour le stock d'un produit
@@ -165,7 +171,6 @@ async def increase_stock(
     product_id: UUID = Depends(get_product_id),
     quantity: int = Body(..., gt=0, description="Quantité à ajouter"),
     reason: str = Body("restock", description="Raison de l'augmentation"),
-    current_user: UUID = Depends(get_current_user)
 ):
     """
     Augmente le stock d'un produit
@@ -185,7 +190,6 @@ async def decrease_stock(
     product_id: UUID = Depends(get_product_id),
     quantity: int = Body(..., gt=0, description="Quantité à retirer"),
     reason: str = Body("sale", description="Raison de la diminution"),
-    current_user: UUID = Depends(get_current_user)
 ):
     """
     Diminue le stock d'un produit
@@ -204,7 +208,6 @@ async def decrease_stock(
 async def bulk_update_stock(
     updates: List[Dict[str, Any]] = Body(..., description="Liste des mises à jour de stock"),
     reason: str = Body("bulk_update", description="Raison de la mise à jour en lot"),
-    current_user: UUID = Depends(get_current_user)
 ):
     """
     Met à jour le stock de plusieurs produits en une opération
@@ -226,16 +229,16 @@ async def bulk_update_stock(
 async def search_products(
     query: str = Query(..., min_length=2, description="Terme de recherche (min. 2 caractères)"),
     limit: int = Query(20, ge=1, le=50, description="Nombre maximum de résultats"),
-    current_user: UUID = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """
     Recherche globale de produits
     """
     try:
-        
+        user_id=get_user_id_or_raise(current_user)
         return await ProductService.search_products(
             search_term=query,
-            user_id=current_user,
+            user_id=user_id,
             limit=limit
         )
     except Exception as e: 
@@ -243,7 +246,7 @@ async def search_products(
 
 @router.get("/analytics/overview", response_model=ResponseSchema)
 async def get_products_stats(
-    current_user: UUID = Depends(get_current_user),
+    current_user = Depends(get_current_user),
     start_date: Optional[str] = Query(None, description="Date de début (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="Date de fin (YYYY-MM-DD)")
 ):
@@ -252,7 +255,7 @@ async def get_products_stats(
     """
 
     try:
-        
+        user_id=get_user_id_or_raise(current_user)
         date_range = None
         if start_date or end_date:
             date_range = DateRangeFilterSchema(
@@ -261,7 +264,7 @@ async def get_products_stats(
             )
         
         return await ProductService.get_products_stats(
-            user_id=current_user,
+            user_id=user_id,
             date_range=date_range
         )
     except Exception as e: 
@@ -276,10 +279,10 @@ async def get_low_stock_products(
     Liste les produits avec stock faible
     """
     try:
-        
+        user_id=get_user_id_or_raise(current_user)
         return await ProductService.get_low_stock_products(
             threshold=threshold,
-            user_id=current_user
+            user_id=user_id
         )
     except Exception as e: 
         handle_exception(e)
@@ -291,7 +294,6 @@ async def get_low_stock_products(
 @router.patch("/{product_id}/availability", response_model=ResponseSchema)
 async def toggle_availability(
     product_id: UUID = Depends(get_product_id),
-    current_user: UUID = Depends(get_current_user)
 ):
     """
     Active/désactive la disponibilité d'un produit
@@ -355,16 +357,12 @@ async def bulk_operations(
 @router.post("/{product_id}/restore", response_model=ResponseSchema)
 async def restore_product(
     product_id: UUID = Depends(get_product_id),
-    current_user: UUID = Depends(get_current_user)
+    current_user = Depends(get_current_admin)
 ):
     """
     Restaure un produit précédemment supprimé (ADMIN)
     """
     try:
-        
-        
-        # Validation des permissions admin
-        await _validate_admin_access(current_user)
         
         # Note: Tu devras ajouter cette méthode dans ProductService
         return await ProductService.restore_product(product_id=product_id)
@@ -374,15 +372,13 @@ async def restore_product(
 @router.get("/admin/inactive", response_model=ResponseSchema)
 async def list_inactive_products(
     pagination: PaginationSchema = Depends(get_pagination_params),
-    current_user: UUID = Depends(get_current_user)
+    current_user = Depends(get_current_admin)
 ):
     """
     Liste les produits inactifs (ADMIN)
     """
     try:
         
-        # Validation des permissions admin
-        await _validate_admin_access(current_user)
         
         query_params = ProductQuerySchema(
             pagination=pagination,
@@ -397,18 +393,17 @@ async def list_inactive_products(
 # 🔹 ROUTES SPÉCIALISÉES
 # ============================
 
-@router.get("/category/{category_id}", response_model=ResponseSchema)
+@router.get("/category/{category_id}", response_model=PaginatedResponseSchema)
 async def get_products_by_category(
-    category_id: UUID = Depends(get_category_id),
+    category_id:str,
     pagination: PaginationSchema = Depends(get_pagination_params),
     only_available: bool = Query(True, description="Produits disponibles seulement"),
-    current_user: UUID = Depends(get_current_user)
+    current_user = Depends(get_current_merchant)
 ):
     """
     Récupère les produits d'une catégorie spécifique
     """
     try:
-        
         query_params = ProductQuerySchema(
             pagination=pagination,
             filters=ProductFilterSchema(
@@ -417,8 +412,7 @@ async def get_products_by_category(
             )
         )
         
-        merchant_id = await validate_merchant_access(current_user)
-        user_id = current_user if not merchant_id else None
+        user_id=get_user_id_or_raise(current_user)
         
         return await ProductService.list_products(
             query_params=query_params,
@@ -427,16 +421,16 @@ async def get_products_by_category(
     except Exception as e: 
         handle_exception(e)
 
-@router.get("/featured/promotions", response_model=ResponseSchema)
+@router.get("/featured/promotions", response_model=PaginatedResponseSchema)
 async def get_featured_promotions(
     limit: int = Query(10, ge=1, le=20, description="Nombre de produits en promotion"),
-    current_user: UUID = Depends(get_current_user)
+    current_user = Depends(get_current_merchant)
 ):
     """
     Récupère les produits en promotion
     """
     try:
-        
+        user_id=get_user_id_or_raise(current_user)
         query_params = ProductQuerySchema(
             pagination=PaginationSchema(page=1, page_size=limit),
             filters=ProductFilterSchema(
@@ -446,8 +440,6 @@ async def get_featured_promotions(
             )
         )
         
-        merchant_id = await validate_merchant_access(current_user)
-        user_id = current_user if not merchant_id else None
         
         return await ProductService.list_products(
             query_params=query_params,
@@ -456,19 +448,19 @@ async def get_featured_promotions(
     except Exception as e: 
         handle_exception(e)
 
-@router.get("/user/own", response_model=ResponseSchema)
+@router.get("/user/own", response_model=PaginatedResponseSchema)
 async def get_user_products(
     query_params: ProductQuerySchema = Depends(get_product_query_params),
-    current_user: UUID = Depends(get_current_user)
+    current_user = Depends(get_current_merchant)
 ):
     """
     Récupère les produits de l'utilisateur connecté
     """
     try:
-        
+        user_id=get_user_id_or_raise(current_user)
         return await ProductService.list_products(
             query_params=query_params,
-            user_id=current_user
+            user_id=user_id
         )
     except Exception as e: 
         handle_exception(e)
@@ -504,20 +496,22 @@ async def get_export_formats():
 @router.get("/reports/stock-levels", response_model=ResponseSchema)
 async def get_stock_levels_report(
     threshold: int = Query(5, description="Seuil pour stock faible"),
-    current_user: UUID = Depends(get_current_user)
+    current_user = Depends(get_current_merchant)
 ):
     """
     Génère un rapport détaillé des niveaux de stock
     """
     try:
         
+        user_id=get_user_id_or_raise(current_user)
+
         # Récupérer les statistiques générales
-        stats_response = await ProductService.get_products_stats(user_id=current_user)
+        stats_response = await ProductService.get_products_stats(user_id=user_id)
         
         # Récupérer les alertes stock faible
         low_stock_response = await ProductService.get_low_stock_products(
             threshold=threshold,
-            user_id=current_user
+            user_id=user_id
         )
         
         # Combiner les données

@@ -1,4 +1,7 @@
 from typing import List, Optional, Dict, Any
+import random
+import string
+from datetime import datetime,timezone
 from uuid import UUID
 from decimal import Decimal
 from tortoise.transactions import in_transaction
@@ -8,14 +11,14 @@ from core.logging import logger
 
 from models.product_model import Product
 from models.category_model import Category
+from schemas.pagination_schema import PaginatedResponseSchema
 from schemas.product_schemas import (
     ProductCreate,
     ProductUpdate,
     ProductOut,
     ProductSimpleOut,
     ProductSummaryOut,
-    ProductStockAlertOut,
-    PaginatedProductsResponse
+    ProductStockAlertOut
 )
 from schemas.filter_schemas import (
     ProductFilterSchema,
@@ -81,13 +84,7 @@ class ProductService:
                 )
 
             # Validation SKU unique
-            if payload.sku:
-                sku_exists = await Product.filter(
-                    sku=payload.sku,
-                    is_active=True
-                ).exists()
-                if sku_exists:
-                    raise ConflictException(detail="Un produit avec ce SKU existe déjà")
+            payload.sku=await ProductService._generate_sku()
 
             # Préparation des données
             product_data = payload.model_dump()
@@ -100,7 +97,7 @@ class ProductService:
                 logger.info(f"Produit créé: {product.name} (ID: {product.id}) par {user_id}")
 
                 if return_data:
-                    product_out = await ProductService._enrich_product_data(product)
+                    product_out = ProductOut.from_orm_custom(product)
                     return ResponseSchema(
                         success=True,
                         message="Produit créé avec succès",
@@ -138,8 +135,9 @@ class ProductService:
             if not product:
                 raise NotFoundException(detail="Produit introuvable")
 
-            product_data = await ProductService._enrich_product_data(
-                product, 
+            product_data = ProductOut.from_orm_custom(
+                product,
+                include_category=include_category, 
                 include_analytics=include_analytics
             )
 
@@ -254,8 +252,9 @@ class ProductService:
     @staticmethod
     async def list_products(
         query_params: ProductQuerySchema,
-        user_id: Optional[UUID] = None
-    ) -> EnhancedPaginatedResponse:
+        user_id: Optional[UUID] = None,
+        extend: Optional[bool] = False
+    ) -> PaginatedResponseSchema:
         """
         Liste les produits avec filtres avancés, pagination et tri
         """
@@ -267,32 +266,43 @@ class ProductService:
             
             # Comptage total avant pagination
             total = await query.count()
+
+            # Pagination
+            limit = query_params.pagination.limit
+            offset = query_params.pagination.offset
+            page = query_params.pagination.page
             
-            # Application pagination et tri
-            products = await ProductService._apply_pagination_and_sort(
-                query, 
-                query_params.pagination
-            ).prefetch_related("category")
+            # Application tri et pagination (slice) puis préchargement catégorie
+            paginated_query = ProductService._apply_pagination_and_sort(query, query_params.pagination)
+
+            # Préchargement catégorie uniquement si extend=True
+            if extend:
+                paginated_query = paginated_query.prefetch_related("category")
+                
+            products_list = await paginated_query  # <- await ici seulement
+
 
             # Sérialisation des données
             products_data = [
-                await ProductService._enrich_product_data(product, include_category=True)
-                for product in products
+                ProductOut.from_orm_custom(product,include_category=extend)
+                for product in products_list
             ]
 
-            # Métadonnées des filtres
-            filter_metadata = FilterMetadata(
-                applied_filters=query_params.filters.model_dump(),
-                search_query=query_params.filters.search,
-                total_before_filtering=total  # Dans ce cas c'est le même car on a appliqué les filtres avant count
-            )
+            # Calcul des métadonnées de pagination
+            total_pages = (total + limit - 1) // limit if limit else 1
+            has_next = offset + limit < total
+            has_previous = offset > 0
 
-            return EnhancedPaginatedResponse.create(
-                data=products_data,
+            return PaginatedResponseSchema(
+                items=products_data,
+                limit=limit,
+                offset=offset,
+                page=page,
                 total=total,
-                pagination=query_params.pagination,
-                message="Produits récupérés avec succès",
-                filters=filter_metadata
+                total_pages=total_pages,
+                has_next=has_next,
+                has_previous=has_previous,
+                filters=query_params.filters.model_dump()
             )
 
         except Exception as e:
@@ -325,7 +335,7 @@ class ProductService:
             products = await query.limit(limit).prefetch_related("category")
             
             products_data = [
-                await ProductService._enrich_product_data(product, include_category=True)
+                ProductOut.from_orm_custom(product, include_category=True)
                 for product in products
             ]
 
@@ -805,58 +815,44 @@ class ProductService:
         return query
 
     @staticmethod
-    async def _apply_pagination_and_sort(
+    def _apply_pagination_and_sort(
         query: QuerySet,
         pagination: PaginationSchema
     ) -> QuerySet:
         """Applique la pagination et le tri"""
-        query = query.offset(pagination.offset).limit(pagination.limit)
-        
         # Gestion du tri
         sort_field = pagination.sort_by
         if pagination.sort_order == "desc":
             sort_field = f"-{sort_field}"
-            
-        return query.order_by(sort_field)
+        query = query.order_by(sort_field)
+        
+        # Pagination slice
+        query = query[pagination.offset:pagination.offset + pagination.limit]
+        
+        return query
 
     @staticmethod
-    async def _enrich_product_data(
-        product: Product,
-        include_category: bool = False,
-        include_analytics: bool = False
-    ) -> Dict[str, Any]:
-        """Enrichit les données du produit avec des informations calculées"""
+    async def _generate_sku(prefix: str = "PRD", length: int = 6) -> str:
+        """
+        Génère un SKU unique au format : PREFIX-YYYYMMDD-RANDOM
+        Exemple : PRD-20251027-4F8KQZ
         
-        product_dict = ProductOut.from_orm(product).model_dump()
-        
-        # Propriétés calculées
-        product_dict["has_discount"] = (
-            product.compare_at_price is not None and 
-            product.compare_at_price > product.price
-        )
-        product_dict["is_low_stock"] = (
-            product.stock_quantity <= (product.low_stock_threshold or 5)
-        )
-        
-        # Calcul pourcentage de réduction
-        if product_dict["has_discount"]:
-            discount = ((product.compare_at_price - product.price) / product.compare_at_price) * 100
-            product_dict["discount_percentage"] = int(discount)
-        else:
-            product_dict["discount_percentage"] = None
+        Args:
+            prefix (str): Préfixe du SKU (ex: "PRD" pour Product)
+            length (int): Longueur du segment aléatoire
 
-        # Données de la catégorie
-        if include_category and product.category:
-            from schemas.category_schemas import CategorySimpleOut
-            product_dict["category"] = CategorySimpleOut.from_orm(product.category).model_dump()
+        Returns:
+            str: SKU unique
+        """
+        while True:
+            # Génération du SKU
+            date_part = datetime.now(timezone.utc).strftime("%Y%m%d")
+            random_part = ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+            sku = f"{prefix}-{date_part}-{random_part}"
 
-        # Analytics supplémentaires
-        if include_analytics:
-            # Ici tu pourrais ajouter des données d'analytics depuis d'autres sources
-            product_dict["analytics"] = {
-                "views": 0,  # À implémenter
-                "sales_count": 0,  # À implémenter
-                "rating": None  # À implémenter
-            }
+            # Vérification en base pour garantir l’unicité
+            exists = await Product.filter(sku=sku, is_active=True).exists()
+            if not exists:
+                return sku
+            # Si collision improbable, on regénère
 
-        return product_dict

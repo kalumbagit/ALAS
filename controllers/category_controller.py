@@ -63,7 +63,7 @@ def handle_exception(e: Exception):
         )
     elif isinstance(e, ValidationError):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=e.errors()
         )
     else:

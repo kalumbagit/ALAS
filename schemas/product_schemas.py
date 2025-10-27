@@ -30,10 +30,12 @@ class ProductBase(BaseModel):
     
     model_config = {"from_attributes": True}
 
-    @field_validator('compare_at_price')
-    def validate_compare_price(cls, v, values):
-        if v is not None and 'price' in values and v <= values['price']:
-            raise ValueError('compare_at_price doit être supérieur au prix normal')
+    @field_validator("compare_at_price")
+    def validate_compare_price(cls, v, info):
+        # ⚠️ info.data contient les autres champs déjà validés
+        price = info.data.get("price")
+        if v is not None and price is not None and v <= price:
+            raise ValueError("Le prix comparé doit être supérieur au prix normal")
         return v
 
 class ProductCreate(ProductBase):
@@ -96,10 +98,8 @@ class ProductSimpleOut(BaseModel):
 
 class ProductOut(ProductBase):
     id: UUID
-    created_at: str  # ou datetime
-    updated_at: str  # ou datetime
-    created_by: UUID
-    is_active: bool
+    #created_by: UUID
+    #is_active: bool
     category: Optional["CategorySimpleOut"] = None  # Relation complète
     
     # Propriétés calculées
@@ -110,21 +110,50 @@ class ProductOut(ProductBase):
     model_config = {"from_attributes": True}
 
     @classmethod
-    def from_orm_custom(cls, obj) -> Dict[str, Any]:
-        """Version enrichie avec propriétés calculées"""
-        p = cls.model_validate(obj)
-        data = p.model_dump()
-        
+    def from_orm_custom(cls, obj, include_category: bool = False, include_analytics: bool = False) -> Dict[str, Any]:
+        """
+        Sérialisation complète du produit, avec propriétés calculées et options pour catégorie et analytics.
+        Safe si la relation `category` n'est pas préchargée.
+        """
+        data = {
+            "id": obj.id,
+            "name": obj.name,
+            "price": obj.price,
+            "compare_at_price": obj.compare_at_price,
+            "currency": obj.currency,
+            "is_available": obj.is_available,
+            "stock_quantity": obj.stock_quantity,
+            "image_urls": obj.image_urls or [],
+            "sku": obj.sku,
+        }
+
         # Propriétés calculées
         data["has_discount"] = obj.compare_at_price is not None and obj.compare_at_price > obj.price
         data["is_low_stock"] = obj.stock_quantity <= (obj.low_stock_threshold or 5)
         data["discount_percentage"] = None
-        
         if data["has_discount"]:
             discount = ((obj.compare_at_price - obj.price) / obj.compare_at_price) * 100
             data["discount_percentage"] = int(discount)
-        
-        data["summary"] = f"{data['name']} - {data['price']} {data['currency']}"
+
+        # Résumé rapide
+        data["summary"] = f"{obj.name} - {obj.price} {obj.currency}"
+
+        # Gestion catégorie uniquement si demandée et préchargée
+        if include_category and getattr(obj, "category", None):
+            try:
+                from schemas.category_schemas import CategorySimpleOut
+                data["category"] = CategorySimpleOut.model_validate(obj.category).model_dump()
+            except Exception:
+                data["category"] = None  # fallback safe
+
+        # Analytics supplémentaires si demandé
+        if include_analytics:
+            data["analytics"] = {
+                "views": getattr(obj, "views", 0),
+                "sales_count": getattr(obj, "sales_count", 0),
+                "rating": getattr(obj, "rating", None),
+            }
+
         return data
 
 # ============================
@@ -144,17 +173,6 @@ class ProductSummaryOut(BaseModel):  # Nouveau - pour recherches/listing
     
     model_config = {"from_attributes": True}
 
-class PaginatedProductsResponse(BaseModel):
-    success: bool = True
-    message: str
-    total: int
-    page: int
-    page_size: int
-    total_pages: int  # Nouveau
-    data: List[Dict[str, Any]]
-    filters: Optional[Dict[str, Any]] = None  # Nouveau - filtres appliqués
-    
-    model_config = {"from_attributes": True}
 
 class ProductStockAlertOut(BaseModel):  # Nouveau - pour alertes stock
     product_id: UUID

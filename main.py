@@ -1,10 +1,16 @@
 # app/main.py
 from fastapi import FastAPI
+from fastapi.openapi.utils import get_openapi
+
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from contextlib import asynccontextmanager
 import logging
 from typing import Any, Dict
+
+from fastapi import Security
+from fastapi.security import HTTPBearer
+
 
 from core.database import init_db, close_db
 from core.config import settings
@@ -17,6 +23,7 @@ from controllers import (
     category_controller,
     product_controller
 )
+
 
 # Configuration du logging
 setup_logging()
@@ -126,46 +133,7 @@ def create_application() -> FastAPI:
     _setup_exception_handlers(app)
     
     # --- Configuration Swagger pour JWT ---
-    from fastapi.openapi.utils import get_openapi
-
-    def custom_openapi():
-        if app.openapi_schema:
-            return app.openapi_schema
-        openapi_schema = get_openapi(
-            title=app.title,
-            version=app.version,
-            description=app.description,
-            routes=app.routes,
-            contact=app.contact,
-            license_info=app.license_info
-        )
-        # Déclare le schéma Bearer JWT
-        openapi_schema["components"]["securitySchemes"] = {
-            "BearerAccessAuth": {
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "JWT",
-            "description": (
-                    "🔑 **Access Token JWT** — requis pour accéder aux routes protégées.\n\n"
-                    "Format : `Bearer <access_token>`"
-                )
-            },
-            "RefreshHeaderAuth": {
-                "type": "apiKey",
-                "in": "header",
-                "name": "X-Refresh-Token",
-                "description": (
-                    "♻️ **Refresh Token JWT** — à fournir dans le header `X-Refresh-Token`.\n\n"
-                    "Format : `<refresh_token>`"
-                ),
-            },
-        }
-        # Applique-le globalement aux routes protégées
-        openapi_schema["security"] = [{"BearerAccessAuth": []}]
-        app.openapi_schema = openapi_schema
-        return app.openapi_schema
-
-    app.openapi = custom_openapi
+    _setup_custom_openapi(app)
 
     return app
 
@@ -211,10 +179,12 @@ def _setup_routers(app: FastAPI) -> None:
         prefix=f"/{settings.APP_TYPE}/{settings.API_VERSION}/health",
         tags=["Health"]
     )
+    
     app.include_router(
         category_controller.router,
         prefix=f"/{settings.APP_TYPE}/{settings.API_VERSION}"
     )
+    
     app.include_router(
         product_controller.router,
         prefix=f"/{settings.APP_TYPE}/{settings.API_VERSION}"
@@ -330,6 +300,54 @@ def _setup_exception_handlers(app: FastAPI) -> None:
                 "data": None
             }
         )
+
+def _setup_custom_openapi(app: FastAPI) -> None:
+    """
+    Configure un schéma OpenAPI personnalisé avec support JWT.
+    """
+
+    def custom_openapi():
+        if app.openapi_schema:
+            return app.openapi_schema
+
+        openapi_schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+            contact=app.contact,
+            license_info=app.license_info,
+        )
+
+        # --- 🔐 Définition des schémas de sécurité JWT ---
+        openapi_schema["components"]["securitySchemes"] = {
+            "AuthMiddleware": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": (
+                    "🔑 **Access Token JWT** — requis pour accéder aux routes protégées.\n\n"
+                    "Format : `Bearer <access_token>`"
+                ),
+            },
+            "RefreshHeaderAuth": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-Refresh-Token",
+                "description": (
+                    "♻️ **Refresh Token JWT** — à fournir dans le header `X-Refresh-Token`.\n\n"
+                    "Format : `<refresh_token>`"
+                ),
+            },
+        }
+
+        # --- 🔒 Appliquer le schéma globalement ---
+        openapi_schema["security"] = [{"AuthMiddleware": []}]
+        app.openapi_schema = openapi_schema
+        return app.openapi_schema
+
+    # ✅ Assignation correcte
+    app.openapi = custom_openapi
 
 
 # Instance de l'application

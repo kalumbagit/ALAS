@@ -9,6 +9,7 @@ from core.exceptions import UnauthorizedException,InternalServerException
 from core.redis import RedisService
 import time
 
+
 # Cache pour les tokens vérifiés (optionnel, pour la performance)
 
 class AuthMiddleware(HTTPBearer):

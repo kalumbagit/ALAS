@@ -174,13 +174,17 @@ class DateRangeFilterSchema(BaseModel):
         example="created_at"
     )
 
-    model_config = {"from_attributes": True}
+    model_config = {
+        "from_attributes": True,
+        "extra": "forbid"  # empêche les champs inconnus
+    }
 
     @field_validator('end_date')
-    def validate_date_range(cls, v, values):
+    def validate_date_range(cls, v, info):
         """Valide que end_date >= start_date"""
-        if v is not None and 'start_date' in values and values['start_date'] is not None:
-            if v < values['start_date']:
+        start_date = info.data.get('start_date')
+        if v is not None and start_date is not None:
+            if v < start_date:
                 raise ValueError('end_date doit être postérieure à start_date')
         return v
 
