@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import Query, Depends,Path
 from schemas.filter_schemas import PaginationSchema, CategoryFilterSchema,ProductQuerySchema,ProductFilterSchema,CategoryQuerySchema
 from core.exceptions import APIException
+from services.file_service import MinioStorage
 
 
 async def get_pagination_params(
@@ -134,6 +135,28 @@ async def get_category_id(category_id: UUID = Path(..., description="ID de la ca
     if not category_id:
         raise APIException(detail="ID de catégorie requis")
     return category_id
+
+storage = MinioStorage()
+
+openapi_extra={
+        "requestBody": {
+            "content": {
+                "multipart/form-data": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "payload": {"type": "string"},
+                            "images": {
+                                "type": "array",
+                                "items": {"type": "string", "format": "binary"}
+                            },
+                        },
+                        "required": ["payload"],
+                    }
+                }
+            }
+        }
+    }
 
 async def get_product_id(product_id: UUID = Path(..., description="ID du produit")) -> UUID:
     """Validation de base pour l'ID de produit"""

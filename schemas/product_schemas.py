@@ -2,7 +2,7 @@ from __future__ import annotations  # 🔹 essentiel pour forward refs
 from typing import Optional, List, Any, Dict
 from uuid import UUID
 from decimal import Decimal
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator,HttpUrl
 from models.enum import CurrencyEnum
 from schemas.category_schemas import CategorySimpleOut
 
@@ -25,8 +25,8 @@ class ProductBase(BaseModel):
     category_id: Optional[UUID] = Field(None, description="ID de la catégorie")
     sku: Optional[str] = Field(None, max_length=100, example="PROD-001")  # Nouveau
     tags: List[str] = Field(default_factory=list)  # Nouveau
-    attributes: Dict[str, Any] = Field(default_factory=dict)  # Type amélioré
-    image_urls: List[str] = Field(default_factory=list)  # Nouveau - remplace image_url
+    attributes: Optional[Dict[str, Any]] = Field(default_factory=dict)  # Type amélioré
+    image_urls: Optional[List[str]] = Field(default_factory=list)  # Nouveau - remplace image_url
     
     model_config = {"from_attributes": True}
 

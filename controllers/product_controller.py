@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Any
 from uuid import UUID
-from fastapi import APIRouter, Depends, Query, Body
-
+from fastapi import APIRouter, Depends, Query, Body,UploadFile, File,Form
+import json
 from schemas.product_schemas import ProductCreate,ProductUpdate
 from schemas.category_schemas import ResponseSchema
 from schemas.filter_schemas import (
@@ -25,36 +25,66 @@ from .category_controller import (
 )
 from core.dependencies import (
     get_product_query_params,
-    get_product_id
+    get_product_id,
+    storage,
+    openapi_extra
 )
+from core.logging import logger
 
 
 router = APIRouter(prefix="/products", tags=["products"])
-
 
 # ============================
 # 🔹 ROUTES CRUD BASIQUES
 # ============================
 
-@router.post("", response_model=ResponseSchema, status_code=201)
+@router.post("", response_model=ResponseSchema, status_code=201,openapi_extra=openapi_extra)
 async def create_product(
-    payload: ProductCreate,
+    payload: str = Form(..., description="Objet JSON contenant les données du produit"),
+    images: List[UploadFile] = File(default_factory=list, description="Images du produit"),
     current_user = Depends(get_current_user),
     return_data: bool = Query(False, description="Inclure les données créées dans la réponse")
 ):
     """
     Crée un nouveau produit
     """
-    try:    
-        user_type=get_user_type_or_raise(current_user)
-        if user_type =="merchant":
-            merchant_id_user=get_user_id_or_raise(current_user)
-        else:
-            merchant_id_user =None
+    try: 
+        # 🧩 Parse du JSON   
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            raise ValueError("Le champ 'payload' doit contenir un JSON valide.")
+        
+        product_data = ProductCreate(**data)
+        
+        
+        # 🔐 Vérifie le type d'utilisateur
+        user_type = get_user_type_or_raise(current_user)
+        merchant_id_user = get_user_id_or_raise(current_user) if user_type == "merchant" else None
+
+
+        # 📸 Upload des fichiers vers MinIO
+        image_urls = []
+        if images:
+            if isinstance(images, list):
+                files_to_process = images
+            else:
+                files_to_process = [images]
+        
+            # Limiter à 4 images maximum
+            if len(files_to_process) > 4:
+                files_to_process = files_to_process[:4]
+                logger.warning(f"Trop d'images fournies. Seules les 4 premières seront conservées.")
+
+             # Upload batch - UNE SEULE LIGNE !
+            if files_to_process:
+                image_urls = await storage.upload_product_images(files_to_process)
+
+        product_data.image_urls = image_urls
 
         return await ProductService.create_product(
             user_id=merchant_id_user,
-            payload=payload,
+            payload=product_data,
             return_data=return_data
         )
     except Exception as e: 

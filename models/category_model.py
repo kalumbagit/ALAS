@@ -5,7 +5,6 @@ from models.base_model import BaseModel
 class Category(BaseModel):
     name = fields.CharField(max_length=100, unique=True)
     description = fields.TextField(null=True)
-    icon_url = fields.CharField(max_length=255, null=True)
     
     # Remplacer is_active par celui de BaseModel
     # is_active = fields.BooleanField(default=True)  # Supprimé car hérité

@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field
 class CategoryBase(BaseModel):
     name: str = Field(..., example="Fast Food")
     description: Optional[str] = Field(None, example="Produits de restauration rapide")
-    icon_url: Optional[str] = Field(None, example="https://cdn.app/icon.png")
     parent_id: Optional[UUID] = Field(None, description="ID de la catégorie parente")  # Nouveau
     
     model_config = {
@@ -20,14 +19,12 @@ class CategoryBase(BaseModel):
         "populate_by_name": True
     }
 
-
 class CategoryCreate(CategoryBase):
     merchant_id: Optional[UUID] = None  # Null si catégorie globale
 
 class CategoryUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    icon_url: Optional[str] = None
     is_active: Optional[bool] = None
     parent_id: Optional[UUID] = None  # Nouveau
     
