@@ -23,7 +23,7 @@ from core.logging import logger
 
 router = APIRouter(prefix="/users", tags=["Users - Customer Management"])
 
-admin_router = APIRouter(prefix="/admin/customer",tags=["Admin - Customer Management"])
+admin_router = APIRouter(prefix="/admin/manage/users",tags=["Admin - Customer Management"])
 
 user_service = UserService()
 
