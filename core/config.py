@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     # --- Redis ---
     REDIS_HOST: str
     REDIS_PORT: int
+    REDIS_DB_DEFAULT: int
     REDIS_DB_TOKEN_CACHE: int
     REDIS_DB_REQUEST_CACHE: int
 

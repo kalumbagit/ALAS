@@ -45,24 +45,18 @@ class AuthMiddleware(HTTPBearer):
         """
         Vérifie et décode le token JWT
         """
-        # 1️⃣ Vérification du cache (si déjà validé récemment)
-        cached_payload = await self.client.get_data(token)
-        if cached_payload:
-            self._inject_user_data(request, cached_payload)
-            return cached_payload
+        
 
         try:
-            # Décodage et validation du token
-            payload = jwt.decode(
-                token, 
-                self.jwt_secret, 
-                algorithms=[self.jwt_algorithm],
-                options={
-                    "verify_signature": True,
-                    "require_exp": True,
-                    "verify_exp": True
-                }
-            )
+            # 1️⃣ Décodage et validation du token
+            payload = self._decode_and_validate_token(token=token)
+
+            # 2️⃣ Vérification du cache (si déjà validé récemment) et pas encore deconnecter dans le service user
+            jti_user = payload.get("jti")
+            cached_payload = await self.client.get_data(token,jti_user)
+            if cached_payload:
+                self._inject_user_data(request, cached_payload)
+                return cached_payload
 
             # 3️⃣ Validation des claims
             self._validate_payload(payload)
@@ -120,9 +114,10 @@ class AuthMiddleware(HTTPBearer):
         if missing_claims:
             raise JWTError(f"Claims manquants dans le token: {missing_claims}")
 
-        subject = payload.get("subject", {})
-        user_id = subject.get("sub")
-        user_type = subject.get("user_type")
+        subject = payload.get("subject") or {}
+        user_id = payload.get("sub") or subject.get("sub")
+        user_type = payload.get("user_type") or subject.get("user_type")
+
 
         if not user_id or not isinstance(user_id, (str, int)):
             raise JWTError("user_id invalide dans le token")
@@ -169,6 +164,29 @@ class AuthMiddleware(HTTPBearer):
             #"merchant_id": payload.get("merchant_id"),  # Si l'utilisateur gère un marchand spécifique
             #"email": payload.get("email")
         }
+    
+    def _decode_and_validate_token(self, token: str) -> Dict[str, Any]:
+        """
+        Décode et valide le token JWT de manière sécurisée
+        """
+        try:
+            # Décodage initial du token
+            payload = jwt.decode(
+                token, 
+                self.jwt_secret, 
+                algorithms=[self.jwt_algorithm],
+                options={
+                    "verify_signature": True,
+                    "require_exp": True,
+                    "verify_exp": True
+                }
+            )
+
+            return payload
+
+        except JWTError as e:
+            logger.error(f"Erreur lors du décodage du token: {e}")
+            raise
 
 # Instances réutilisables
 auth_middleware = AuthMiddleware()

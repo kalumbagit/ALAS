@@ -36,7 +36,29 @@ class RedisService:
                 decode_responses=True
             )
 
+        # Connexion denylist pour jti (DB 0)
+        self._async_denylist = aioredis.from_url(
+            f"redis://{self.host}:{self.port}/{settings.REDIS_DB_DEFAULT}", decode_responses=True
+        )
     
+    # -------------------------------
+    # Méthodes de gestion de la denylist
+    # -------------------------------
+    async def add_jti_to_denylist(self, jti: str, ttl: int):
+        """Ajoute un jti à la denylist pour bloquer le token"""
+        try:
+            await self._async_denylist.set(f"denylist:{jti}", "revoked", ex=ttl)
+        except Exception as e:
+            logger.warning(f"Erreur Redis ADD denylist {jti}: {e}")
+
+    async def is_jti_revoked(self, jti: str) -> bool:
+        """Vérifie si un jti est déjà révoqué"""
+        try:
+            is_revoked = await self._async_denylist.exists(jti) == 1
+            return bool(is_revoked)
+        except Exception as e:
+            logger.warning(f"Erreur Redis CHECK denylist {jti}: {e}")
+            return True  # par sécurité, bloquer l'accès
 
     # -------------------------------------------------
     # 🧠 MÉTHODES DE GESTION GÉNÉRIQUE
@@ -54,10 +76,16 @@ class RedisService:
             logger.warning(f"Erreur Redis SET {key}: {e}")
             return None
 
-    async def get_data(self, key: str) -> Optional[str]:
+    async def get_data(self, key: str,verify_revocation_for: Optional[str] = None) -> Optional[str]:
         """
-        Récupère une donnée dans Redis (asynchrone)
+        Récupère une donnée dans Redis.
+        Si check_jti est fourni, vérifie que ce jti n'est pas révoqué.
         """
+        # Vérification de la denylist
+        if verify_revocation_for:
+            if await self.is_jti_revoked(verify_revocation_for):
+                logger.warning(f"Accès refusé pour jti révoqué : {verify_revocation_for}")
+                return None
         try:
             data= await self._async_client.get(key)
             if data:
