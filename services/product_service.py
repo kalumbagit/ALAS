@@ -253,7 +253,7 @@ class ProductService:
     async def list_products(
         query_params: ProductQuerySchema,
         user_id: Optional[UUID] = None,
-        extend: Optional[bool] = False
+        extend: Optional[bool] = True
     ) -> PaginatedResponseSchema:
         """
         Liste les produits avec filtres avancés, pagination et tri
