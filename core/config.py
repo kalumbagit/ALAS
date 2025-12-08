@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     LOG_FORMAT: str = "json"
 
     # --- CORS ---
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    CORS_ORIGINS: List[str] = ["http://10.22.185.238:5173", "http://127.0.0.1:3000","http://192.168.189.1:5173","http://192.168.65.1:5173"]
 
     # --- Allowed Hosts ---
     ALLOWED_HOSTS: List[str] = ["*"]

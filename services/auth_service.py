@@ -12,6 +12,7 @@ from tortoise.exceptions import DoesNotExist, OperationalError
 from models.user_model import User, DelivererDetails, Merchant, UserType
 from schemas.user_schema import (
     LoginDataSchema,
+    APIUserResponse,
     LoginResponseSchema,
     TokenResponseSchema,
     UserOutSchema,
@@ -188,7 +189,7 @@ class AuthService:
     # ===================================================
     # 🔸 Logout complet (access + refresh)
     # ===================================================
-    async def logout(self, access_token: str, refresh_token: str) -> LoginResponseSchema:
+    async def logout(self, access_token: str, refresh_token: str) -> APIUserResponse:
         """
         Révoque l'access token et le refresh token pour déconnexion sécurisée.
         """
@@ -208,7 +209,7 @@ class AuthService:
             user_id = access_payload.get("sub") or access_payload.get("subject", {}).get("sub", "inconnu")
             logger.info(f"Logout successful for user {user_id}")
 
-            return LoginResponseSchema(detail="Déconnexion réussie, tokens révoqués")
+            return APIUserResponse(detail="Déconnexion réussie, tokens révoqués")
 
         except UnauthorizedException as e:
             # Token invalide ou expiré
